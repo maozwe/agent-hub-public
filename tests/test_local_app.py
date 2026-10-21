@@ -12,6 +12,27 @@ from local_app import make_server
 
 
 class LocalAppTests(unittest.TestCase):
+    def test_manual_completion_is_atomic_idempotent_and_does_not_claim_next(self):
+        from unittest.mock import patch
+        with closing(Hub(self.config['database'])) as hub:
+            hub.register_agent('claude',True)
+            task=hub.create_task('test/local','Manual task',2)
+            hub.assign(task['id'],'claude');hub.claim('claude')
+            hub.transition(task['id'],'claude','working');hub.block(task['id'],'claude','timeout')
+            following=hub.create_task('test/local','Next task',2);hub.assign(following['id'],'claude')
+            task=hub.task(task['id'])
+        task['activity']={'manual':True,'report':'CI still running'}
+        self.server.controller.sync_manual_completion(task)
+        self.assertEqual(task['status'],'blocked')
+        task['activity']['report']=json.dumps({'state':'completed','summary':'Update finished','verification':'Tests passed; no release'})
+        with patch.object(Hub,'claim',side_effect=AssertionError('Must not claim')):
+            self.server.controller.sync_manual_completion(task)
+            self.server.controller.sync_manual_completion(task)
+        with closing(Hub(self.config['database'])) as hub:
+            saved=hub.task(task['id'])
+            self.assertEqual(saved['status'],'completed');self.assertIn('Tests passed',saved['verification'])
+            self.assertIsNone(saved['blocked_reason']);self.assertEqual(hub.task(following['id'])['status'],'queued')
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

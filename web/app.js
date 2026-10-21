@@ -58,7 +58,7 @@ function activityLine(task) {
   if(!activity?.at) {root.textContent='אין דיווח פעילות חי מהסוכן';if(activity?.started_at)root.append(el('span','תחילת ההפעלה: '+localTime(activity.started_at),'muted'));return root;}
   const seconds=Math.max(0,activity.age_seconds), age=seconds<60?seconds+' שניות':Math.floor(seconds/60)+' דקות';
   root.append(el('span',activity.summary),el('span','פעילות אחרונה: לפני '+age+' · '+localTime(activity.at),'muted'));
-  if(activity.stale) {root.classList.add('activity-stale');root.append(el('span','לא התקבל עדכון במשך יותר משתי דקות — ייתכן שהפעולה ממושכת או שהסוכן תקוע.'));}
+  if(activity.stale) {root.classList.add('activity-stale');root.append(el('span','אין דיווח חדש מעל שתי דקות; ייתכן שמשימת רקע עדיין רצה.'));}
   return root;
 }
 function meta(task) { const node=el('div',undefined,'meta'); node.append(el('span',task.repository,'repo'),el('span','#'+task.id),el('span',task.agent||'טרם שויך סוכן'),el('span','עדיפות '+task.priority)); return node; }
@@ -157,6 +157,7 @@ function renderDetail() {
   const task=state.tasks.find(task=>task.id===selected);
   if(!task) {root.append(el('p','בחרו משימה כדי לראות את הבקשה, ההחלטות ותוצאות ההפעלה.','empty'));return;}
   root.append(meta(task),badge(task.status,task.id),el('pre',task.request),activityLine(task));
+  if(task.activity?.report) root.append(el('h3','הדיווח האחרון מהסשן הידני'),el('pre',task.activity.report));
   root.append(el('h3','הסוכנים במשימה'));
   if(task.status==='queued') root.append(assignment(task));
   else root.append(el('p','סוכן ראשי: '+(task.agent||'ללא שיוך')+'. החלפת המבצע זמינה כשהמשימה בתור.','assignment-note'));

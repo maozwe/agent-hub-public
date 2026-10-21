@@ -83,6 +83,13 @@ class ActivityReader:
                         record=json.loads(line)
                         if manual and (record.get('sessionId') != manual['session_id'] or os.path.normcase(record.get('cwd','')) != os.path.normcase(workspace)): continue
                         summary=event_summary(record)
+                        if manual and record.get('timestamp') and timestamp(record['timestamp'])>=timestamp(run['started_at']):
+                            message=record.get('message',{})
+                            if record.get('type') in {'user','assistant'}:
+                                result.pop('report',None)
+                            if record.get('type')=='assistant' and message.get('stop_reason')=='end_turn':
+                                report='\n'.join(b.get('text','') for b in message.get('content',[]) if b.get('type')=='text')
+                                if report.strip(): result['report']=report[:16000]
                         if summary and record.get('timestamp'):
                             at=timestamp(record['timestamp'])
                             if at>=timestamp(run['started_at']) and (latest is None or at>latest[0]): latest=(at,record['timestamp'],summary)

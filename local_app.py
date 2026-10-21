@@ -14,7 +14,7 @@ import threading
 from hub import Hub
 from updates import VERSION, check_update
 from notifications import Push
-from worker import task_write_scope
+from worker import task_write_scope, parse_agent_response
 from activity import ActivityReader
 
 ROOT = Path(__file__).resolve().parent
@@ -77,6 +77,10 @@ class Controller:
             run = max(runs, key=lambda r:r["turn"]) if runs else None
             task["activity"] = self.activity.read(task, run, self.config["repositories"].get(task["repository"], ""),
                 manual=self.config.get("manual_sessions", {}).get(str(task["id"])))
+            self.sync_manual_completion(task)
+            if task['status']=='completed':
+                task['activity']['manual']=False
+                task['activity']['stale']=False
         state["repositories"] = self.config["repositories"]
         state["version"] = VERSION
         state["push"] = {"configured": self.push.enabled, "error": self.push.error}
@@ -88,6 +92,30 @@ class Controller:
                            "exit_code": self.process.poll() if self.process else None,
                            "read_only": not write_tasks, "write_tasks": write_tasks}
         return state
+
+    def sync_manual_completion(self, task):
+        activity=task.get('activity',{})
+        if not activity.get('manual') or not activity.get('report') or task['status']!='blocked': return
+        try: report=parse_agent_response(activity['report'])
+        except ValueError: return
+        if report['state']!='completed': return
+        with closing(Hub(self.config['database'])) as hub:
+            with hub.transaction():
+                current=hub.task(task['id'])
+                if current['status']!='blocked' or current['agent']!=task['agent'] or current['repository']!=task['repository']: return
+                if hub.db.execute("SELECT 1 FROM questions WHERE task_id=? AND (answer IS NULL OR (kind='approval' AND answer='denied'))",(task['id'],)).fetchone(): return
+                # Atomic transitions: the worker never sees a runnable intermediate state.
+                hub.transition(task['id'],task['agent'],'working')
+                hub.transition(task['id'],task['agent'],'testing')
+                done=hub.transition(task['id'],task['agent'],'completed',report['summary']+'\n\n'+report['verification'])
+                hub.db.execute('UPDATE tasks SET blocked_reason=NULL WHERE id=?',(task['id'],))
+                task.update(done); task['blocked_reason']=None
+
+    def watch_manual_sessions(self, stop):
+        while not stop.wait(3):
+            try: self.status()
+            except Exception as error:
+                print('Manual session synchronization failed: '+type(error).__name__,flush=True)
 
     def action(self, data):
         action = data.get("action")
@@ -225,12 +253,17 @@ def main():
     control.write_text(json.dumps({"url": f"http://127.0.0.1:{server.server_port}",
                                   "token": server.controller.token}), encoding="utf-8")
     try:
+        manual_stop=threading.Event()
+        manual_thread=threading.Thread(target=server.controller.watch_manual_sessions,args=(manual_stop,),daemon=True)
+        manual_thread.start()
         server.controller.push.start()
         if not args.no_worker:
             server.controller.start_worker()
         print(f"Agent Hub: http://127.0.0.1:{server.server_port}", flush=True)
         server.serve_forever()
     finally:
+        manual_stop.set()
+        manual_thread.join(timeout=5)
         server.controller.push.close()
         server.controller.stop_worker()
         server.server_close()

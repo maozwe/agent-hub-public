@@ -19,6 +19,11 @@ class ActivityTests(unittest.TestCase):
     self.assertIsNone(reader.read(task,None,'workspace',manual={**binding,**changed})['at'])
    path.write_text(json.dumps({**record,'cwd':'other'}),encoding='utf-8')
    self.assertIsNone(reader.read(task,None,'workspace',manual=binding)['at'])
+   final={**record,'message':{'stop_reason':'end_turn','content':[{'type':'text','text':'CI still running'}]}}
+   path.write_text(json.dumps(final),encoding='utf-8')
+   self.assertEqual(reader.read(task,None,'workspace',manual=binding)['report'],'CI still running')
+   path.write_text(json.dumps(final)+'\n'+json.dumps(record),encoding='utf-8')
+   self.assertNotIn('report',reader.read(task,None,'workspace',manual=binding))
  def test_real_events_and_stale_without_poll_heartbeat(self):
   with tempfile.TemporaryDirectory() as tmp:
    folder=Path(tmp)/'workspace';folder.mkdir()
