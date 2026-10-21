@@ -68,6 +68,22 @@ class LocalAppTests(unittest.TestCase):
             self.assertIn('dir="rtl"', response.read().decode())
             self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
 
+    def test_stale_token_rejected_before_create_and_fresh_token_creates_once(self):
+        stale = self.server.controller.token
+        self.server.controller.token = "replacement-session-token"
+        data = {"action": "create", "repository": "test/local", "request": "Synthetic stale session"}
+        headers = {"Content-Type": "application/json", "Origin": self.base, "X-Hub-CSRF": stale}
+        with self.assertRaises(HTTPError) as error:
+            urlopen(Request(self.base + "/api/action", data=json.dumps(data).encode(), headers=headers))
+        self.assertEqual(error.exception.code, 403)
+        with urlopen(self.base + "/api/status") as response:
+            self.assertEqual(json.load(response)["tasks"], [])
+        with urlopen(self.base + "/") as response:
+            self.assertIn(self.server.controller.token, response.read().decode())
+        self.post(data)
+        with urlopen(self.base + "/api/status") as response:
+            self.assertEqual(len(json.load(response)["tasks"]), 1)
+
     def test_push_registration_requires_csrf_and_never_exposes_tokens(self):
         self.server.controller.push.settings = {"project_id": "test-project", "credentials": "not-used"}
         data = {"action": "push_register", "device": "device-test-00001", "token": "a" * 40}
