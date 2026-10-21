@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../web/app.js'),'utf8');
-const action=source.slice(source.indexOf('async function action('),source.indexOf('async function save('));
-async function scenario(statuses,token='fresh',pageOK=true) {
+const action=source.slice(source.indexOf('async function authenticatedPost('),source.indexOf('async function save('));
+async function scenario(statuses,token='fresh',pageOK=true,voice=false) {
   const calls=[],meta={content:'old'};
   const context=vm.createContext({document:{querySelector:()=>meta},
     DOMParser:class {parseFromString(){return {querySelector:()=>token?{content:token}:null};}},
@@ -12,7 +12,7 @@ async function scenario(statuses,token='fresh',pageOK=true) {
       return {status,ok:status===200,json:async()=>status===200?{id:1}:{error:'denied'}};
     }});
   vm.runInContext(action,context);
-  let result,error;try{result=await vm.runInContext("action({action:'create',request:'draft',agent:'claude'})",context);}catch(e){error=e;}
+  let result,error;try{result=await vm.runInContext(voice?"authenticatedPost('/api/transcribe','recorded-audio')":"action({action:'create',request:'draft',agent:'claude'})",context);}catch(e){error=e;}
   return {calls,result,error};
 }
 (async()=>{
@@ -27,5 +27,12 @@ async function scenario(statuses,token='fresh',pageOK=true) {
     assert.equal(r.calls.filter(c=>c.url==='/api/action').length,posts);
   }
   assert.equal((await scenario([200])).calls.length,1);
+  const voice=await scenario([403,200],'fresh',true,true);
+  assert.equal(voice.result.id,1);
+  assert.deepEqual(voice.calls.map(c=>c.url),['/api/transcribe','/','/api/transcribe']);
+  assert.equal(voice.calls[0].body,voice.calls[2].body);
+  assert.equal(voice.calls[2].headers['X-Hub-CSRF'],'fresh');
+  const failedVoice=await scenario([500],'fresh',true,true);
+  assert.ok(failedVoice.error);assert.equal(failedVoice.calls.length,1);
   console.log('PASS: refresh stale CSRF once, preserve payload, never retry ambiguous failures');
 })().catch(error=>{console.error(error);process.exitCode=1;});

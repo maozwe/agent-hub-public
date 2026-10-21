@@ -6,9 +6,9 @@ const labels = {queued:'בתור', assigned:'נלקחה לסוכן', working:'ב
 let state, selected = null, stopped = false, previous = '', taskFilter = 'all', connectionErrorShown = false;
 function el(tag, text, className) { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(className) node.className=className; return node; }
 function feedback(message, error=false) { connectionErrorShown=false; $('feedback').textContent=message; $('feedback').className=error?'error':''; }
-async function action(data) {
-  const meta=document.querySelector('meta[name="hub-csrf"]'), body=JSON.stringify(data);
-  const post=()=>fetch('/api/action',{method:'POST', headers:{'Content-Type':'application/json','X-Hub-CSRF':meta.content},body});
+async function authenticatedPost(path, body, headers={}) {
+  const meta=document.querySelector('meta[name="hub-csrf"]');
+  const post=()=>fetch(path,{method:'POST', headers:{...headers,'X-Hub-CSRF':meta.content},body});
   let response=await post();
   // A 403 rejects the action before execution; never retry ambiguous network failures.
   if(response.status===403) {
@@ -19,6 +19,9 @@ async function action(data) {
     }
   }
   const result=await response.json(); if(!response.ok) throw new Error(response.status===403?'היישום הופעל מחדש או שהחיבור אינו מורשה. רעננו את הדף ובדקו את החיבור.':result.error || 'הפעולה לא נשמרה'); return result;
+}
+async function action(data) {
+  return authenticatedPost('/api/action',JSON.stringify(data),{'Content-Type':'application/json'});
 }
 async function save(data, button) {
   button.disabled=true;

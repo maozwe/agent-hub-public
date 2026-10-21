@@ -19,8 +19,7 @@ function voiceControls(input, context) {
         try {
           const blob=new Blob(chunks,{type:recorder.mimeType});
           if(blob.size>5*1024*1024)throw Error('ההקלטה גדולה מדי. נסה הקלטה קצרה יותר.');
-          const response=await fetch('/api/transcribe',{method:'POST',headers:{'X-Hub-CSRF':document.querySelector('meta[name="hub-csrf"]').content},body:blob});
-          const result=await response.json();if(!response.ok)throw Error(result.error||'התמלול נכשל. רענן ונסה שוב.');
+          const result=await authenticatedPost('/api/transcribe',blob);
           if(!result.text.trim())throw Error('לא זוהה דיבור.');
           update([input.value,result.text].filter(Boolean).join('\n'));message.textContent='התמלול נוסף. אפשר לערוך או לסדר לטיוטה לפני השליחה.';
         } catch(e){message.textContent=e.message;} finally {chunks=[];record.textContent='🎙 הקלטה';record.disabled=draft.disabled=false;voiceBusy=false;}
