@@ -4,7 +4,7 @@ const feedback=source.slice(source.indexOf('function feedback('),source.indexOf(
 const refresh=source.slice(source.indexOf('async function refresh('),source.indexOf("$('create-form').addEventListener"));
 const nodes={feedback:{},'last-update':{},'connection-status':{}};
 let offline=true;
-const context=vm.createContext({$:id=>nodes[id],document:{activeElement:{closest:()=>null},querySelector:()=>({classList:{add(){},remove(){}}})},
+const context=vm.createContext({$:id=>nodes[id],document:{body:{classList:{add(){},remove(){}}},activeElement:{closest:()=>null},querySelector:()=>({classList:{add(){},remove(){}}})},
   render(){}, fetch:async()=>{if(offline)throw Error('offline');return {ok:true,json:async()=>({tasks:[]})};}});
 vm.runInContext("let stopped=false,previous='',state,connectionErrorShown=false;"+feedback+refresh,context);
 (async()=>{

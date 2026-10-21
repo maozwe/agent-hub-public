@@ -28,6 +28,11 @@ async function save(data, button) {
 function badge(status, taskId) {
   const node=el(status==='waiting_for_user'?'button':'span',labels[status]||status,'badge '+status);
   if(status==='waiting_for_user') {node.type='button';node.setAttribute('aria-label','ממתינה לתשובה · משימה '+taskId);node.addEventListener('click',()=>openAnswers(taskId));}
+  if(['assigned','working','testing'].includes(status)) {
+    const activity=el('span',undefined,'task-activity');activity.setAttribute('aria-hidden','true');
+    for(let i=0;i<3;i++) activity.append(el('span'));
+    node.append(activity);node.title='המשימה במצב ביצוע. האנימציה אינה בדיקת התקדמות חיה של הסוכן.';
+  }
   return node;
 }
 function openAnswers(taskId) {
@@ -175,9 +180,9 @@ async function refresh(force=false) {
     const next=await response.json(), signature=JSON.stringify(next);
     if(force || (signature!==previous && !document.activeElement.closest('form'))) {state=next;previous=signature;render();}
     $('last-update').textContent='עודכן '+new Date().toLocaleTimeString('he-IL',{timeZone:'Asia/Jerusalem'});
-    $('connection-status').textContent='חיבור פרטי תקין';document.querySelector('.connection').classList.remove('offline');
+    $('connection-status').textContent='חיבור פרטי תקין';document.querySelector('.connection').classList.remove('offline');document.body.classList.remove('hub-offline');
     if(connectionErrorShown) feedback('');
-  } catch(error) {$('connection-status').textContent='אין חיבור לשרת';document.querySelector('.connection').classList.add('offline');feedback('אין חיבור ליישום המקומי. בדקו שהמחשב, היישום ו־Tailscale פועלים.',true);connectionErrorShown=true;}
+  } catch(error) {$('connection-status').textContent='אין חיבור לשרת';document.querySelector('.connection').classList.add('offline');document.body.classList.add('hub-offline');feedback('אין חיבור ליישום המקומי. בדקו שהמחשב, היישום ו־Tailscale פועלים.',true);connectionErrorShown=true;}
 }
 $('create-form').addEventListener('submit',async event=>{
   event.preventDefault(); const button=event.submitter;
