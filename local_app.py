@@ -75,7 +75,8 @@ class Controller:
         for task in state["tasks"]:
             runs = [run for run in state.get("runs", []) if run["task_id"] == task["id"]]
             run = max(runs, key=lambda r:r["turn"]) if runs else None
-            task["activity"] = self.activity.read(task, run, self.config["repositories"].get(task["repository"], ""))
+            task["activity"] = self.activity.read(task, run, self.config["repositories"].get(task["repository"], ""),
+                manual=self.config.get("manual_sessions", {}).get(str(task["id"])))
         state["repositories"] = self.config["repositories"]
         state["version"] = VERSION
         state["push"] = {"configured": self.push.enabled, "error": self.push.error}

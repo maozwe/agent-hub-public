@@ -38,16 +38,23 @@ class ActivityReader:
         self.projects = Path(projects) if projects else Path.home()/'.claude'/'projects'
         self.sessions = {}
 
-    def read(self, task, run, workspace, now=None):
+    def read(self, task, run, workspace, now=None, manual=None):
         now = datetime.now(timezone.utc).timestamp() if now is None else now
         result = {'source':'none','summary':'אין דיווח פעילות זמין מהסוכן','at':None,'age_seconds':None,'stale':False}
+        if manual:
+            if (manual.get('repository') != task['repository'] or task['agent'] != 'claude'
+                    or not re.fullmatch(r'[a-f0-9-]{36}', manual.get('session_id', ''))): return result
+            run = {'started_at': manual['since']}
+            result['manual'] = True
         if not run: return result
         result['started_at'] = run['started_at']
         if task['agent'] != 'claude': return result
         key = (task['id'], run['started_at'], workspace)
         path = self.sessions.get(key)
         try:
-            if path is None:
+            if manual:
+                path = self.projects/re.sub(r'[^a-zA-Z0-9]', '-', workspace)/(manual['session_id']+'.jsonl')
+            elif path is None:
                 folder = self.projects/re.sub(r'[^a-zA-Z0-9]', '-', workspace)
                 candidates = sorted(folder.glob('*.jsonl'), key=lambda p:p.stat().st_mtime, reverse=True)[:64]
                 for candidate in candidates:
@@ -73,13 +80,15 @@ class ActivityReader:
                 latest = None
                 for line in lines:
                     try:
-                        record=json.loads(line);summary=event_summary(record)
+                        record=json.loads(line)
+                        if manual and (record.get('sessionId') != manual['session_id'] or os.path.normcase(record.get('cwd','')) != os.path.normcase(workspace)): continue
+                        summary=event_summary(record)
                         if summary and record.get('timestamp'):
                             at=timestamp(record['timestamp'])
                             if at>=timestamp(run['started_at']) and (latest is None or at>latest[0]): latest=(at,record['timestamp'],summary)
                     except (ValueError,TypeError,KeyError): continue
                 if latest:
                     age=max(0,int(now-latest[0]));result.update(source='claude',summary=latest[2],at=latest[1],age_seconds=age,
-                        stale=task['status'] in {'working','testing','assigned'} and age>=120)
+                        stale=(bool(manual) or task['status'] in {'working','testing','assigned'}) and age>=120)
         except (OSError,ValueError,TypeError): pass
         return result

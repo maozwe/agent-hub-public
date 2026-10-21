@@ -26,6 +26,8 @@ async function save(data, button) {
   finally { button.disabled=false; }
 }
 function badge(status, taskId) {
+  const tracked=state?.tasks.find(t=>t.id===taskId)?.activity;
+  if(tracked?.manual) return el('span',tracked.at&&!tracked.stale?'פעילות בסשן ידני':'מעקב סשן ידני','badge working');
   const node=el(status==='waiting_for_user'?'button':'span',labels[status]||status,'badge '+status);
   if(status==='waiting_for_user') {node.type='button';node.setAttribute('aria-label','ממתינה לתשובה · משימה '+taskId);node.addEventListener('click',()=>openAnswers(taskId));}
   if(['assigned','working','testing'].includes(status) && state?.tasks.find(t=>t.id===taskId)?.activity?.at && !state.tasks.find(t=>t.id===taskId).activity.stale) {
@@ -52,6 +54,7 @@ async function answerQuestion(data, button) {
 function localTime(value) { const utc=value.includes('T')?value:value.replace(' ','T')+'Z';return new Date(utc).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem'}); }
 function activityLine(task) {
   const activity=task.activity, root=el('div',undefined,'activity-line');
+  if(activity?.manual) root.append(el('span','Claude · מעקב בלבד אחר סשן ידני; ללא הפעלה דרך Hub','muted'));
   if(!activity?.at) {root.textContent='אין דיווח פעילות חי מהסוכן';if(activity?.started_at)root.append(el('span','תחילת ההפעלה: '+localTime(activity.started_at),'muted'));return root;}
   const seconds=Math.max(0,activity.age_seconds), age=seconds<60?seconds+' שניות':Math.floor(seconds/60)+' דקות';
   root.append(el('span',activity.summary),el('span','פעילות אחרונה: לפני '+age+' · '+localTime(activity.at),'muted'));
@@ -86,7 +89,7 @@ function participantsEditor(task) {
 function selectTask(task) {if(matchMedia('(max-width:680px)').matches)setMobileView('tasks');selected=task.id;renderDetail();$('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
 function renderActive() {
   const root=$('active-tasks');root.replaceChildren();
-  const active=state.tasks.filter(task=>['assigned','working','testing'].includes(task.status));
+  const active=state.tasks.filter(task=>task.activity?.manual||['assigned','working','testing'].includes(task.status));
   if(!active.length) root.append(el('p','אין משימה שרצה כרגע.','empty'));
   for(const task of active) {const row=el('div',undefined,'active-item'),button=el('button','#'+task.id+' · '+task.request.slice(0,100));button.type='button';button.addEventListener('click',()=>selectTask(task));row.append(button,el('span',task.agent||'ללא סוכן','owner'),badge(task.status,task.id));row.append(activityLine(task));root.append(row);}
 }
@@ -107,7 +110,7 @@ function renderTasks() {
     title.type='button'; title.addEventListener('click',()=>selectTask(task));
     if(['assigned','working','testing'].includes(task.status)) row.classList.add('active-task');
     top.append(title,badge(task.status,task.id)); row.append(top,meta(task));
-    if(['assigned','working','testing'].includes(task.status)) row.append(activityLine(task));
+    if(task.activity?.manual||['assigned','working','testing'].includes(task.status)) row.append(activityLine(task));
     if(task.participants?.length) row.append(el('div','משתתפים: '+task.participants.join(', '),'participants-label'));
     if(task.status==='queued') row.append(assignment(task));root.append(row);
   }
@@ -158,7 +161,7 @@ function renderDetail() {
   if(task.status==='queued') root.append(assignment(task));
   else root.append(el('p','סוכן ראשי: '+(task.agent||'ללא שיוך')+'. החלפת המבצע זמינה כשהמשימה בתור.','assignment-note'));
   root.append(participantsEditor(task));
-  if(task.blocked_reason) root.append(el('h3','סיבת החסם'),el('pre',task.blocked_reason));
+  if(task.blocked_reason) root.append(el('h3',task.activity?.manual?'סיבת עצירת ההרצה הקודמת ב־Hub':'סיבת החסם'),el('pre',task.blocked_reason));
   if(task.verification) root.append(el('h3','תיעוד האימות'),el('pre',task.verification));
   for(const question of state.questions.filter(q=>q.task_id===task.id)) {
     const card=el('article',undefined,'question'); card.append(el('h3',question.kind==='approval'?'החלטת אישור':'שאלה ותשובה'),el('p',question.question));
@@ -173,13 +176,13 @@ function render() {
   if(state.version){const current=$('client-version').value||state.version.version;$('current-version').textContent=current;$('server-version').textContent='גרסת שרת: '+state.version.version;$('version-changes').replaceChildren(...state.version.changes.map(change=>el('li',change)));document.querySelector('.brand small').textContent='מרכז החלטות · v'+current;}
   $('phone-link').hidden=!state.phone_url;
   if(state.phone_url) $('phone-link').href=state.phone_url;
-  $('task-count').textContent=state.tasks.length; $('pending-count').textContent=state.pending_questions.length; $('active-count').textContent=state.tasks.filter(t=>['working','testing','assigned'].includes(t.status)).length;
+  $('task-count').textContent=state.tasks.length; $('pending-count').textContent=state.pending_questions.length; $('active-count').textContent=state.tasks.filter(taskFilters.active.matches).length;
   $('execution-mode').textContent=state.worker.read_only?'קריאה בלבד':'כתיבה מאושרת למשימות: '+state.worker.write_tasks.join(', ');
   $('worker-status').textContent=state.worker.running?'המפעיל המקומי פועל':'המפעיל המקומי עצור'; $('worker-toggle').textContent=state.worker.running?'עצירת המפעיל':'הפעלת המפעיל'; $('worker-toggle').disabled=false;
   const repo=$('repository'); if(!repo.options.length) for(const name of Object.keys(state.repositories)) {const option=el('option',name);option.value=name;repo.append(option);}
   const newAgent=$('new-agent');if(newAgent.options.length===1) for(const agent of state.agents){const option=el('option',agent.name);option.value=agent.name;newAgent.append(option);}
   if(!$('new-participants').querySelector('input')) participantChoices($('new-participants'));
-  $('agents').replaceChildren(...state.agents.map(agent=>{const node=el('div',undefined,'agent');node.dataset.initial=agent.name.slice(0,2).toUpperCase();const active=state.tasks.some(task=>task.agent===agent.name&&['working','testing','assigned'].includes(task.status));node.append(el('span',agent.name,'agent-name'),el('span',active?'בעבודה עכשיו':agent.connected?'רשום כזמין':'מנותק','muted'));return node;}));
+  $('agents').replaceChildren(...state.agents.map(agent=>{const node=el('div',undefined,'agent');node.dataset.initial=agent.name.slice(0,2).toUpperCase();const active=state.tasks.some(task=>task.agent===agent.name&&['working','testing','assigned'].includes(task.status));node.append(el('span',agent.name,'agent-name'),el('span',state.tasks.some(t=>t.agent===agent.name&&t.activity?.manual)?'מעקב סשן ידני':active?'בעבודה עכשיו':agent.connected?'רשום כזמין':'מנותק','muted'));return node;}));
   renderActive();renderTasks();renderInbox();renderDetail();
 }
 async function refresh(force=false) {

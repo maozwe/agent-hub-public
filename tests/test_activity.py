@@ -2,6 +2,23 @@ import json,tempfile,unittest
 from pathlib import Path
 from activity import ActivityReader,event_summary,timestamp
 class ActivityTests(unittest.TestCase):
+ def test_manual_session_is_exact_read_only_binding(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   folder=Path(tmp)/'workspace';folder.mkdir()
+   sid='645a4f60-2d68-4e05-87dc-0ed03242c04d'
+   record={'type':'assistant','sessionId':sid,'cwd':'workspace','timestamp':'2026-10-21T17:10:00Z','message':{'content':[{'type':'tool_use','name':'Edit'}]}}
+   path=folder/(sid+'.jsonl');path.write_text(json.dumps(record),encoding='utf-8')
+   task={'id':6,'agent':'claude','repository':'test/repo','status':'blocked'}
+   binding={'session_id':sid,'repository':'test/repo','since':'2026-10-21T17:00:00Z'}
+   reader=ActivityReader(tmp)
+   result=reader.read(task,None,'workspace',timestamp('2026-10-21T17:10:10Z'),manual=binding)
+   self.assertEqual(result['summary'],'עריכת קובץ');self.assertTrue(result['manual']);self.assertFalse(result['stale'])
+   self.assertEqual(task['status'],'blocked');self.assertEqual(path.read_text(encoding='utf-8'),json.dumps(record))
+   self.assertTrue(reader.read(task,None,'workspace',timestamp('2026-10-21T17:13:00Z'),manual=binding)['stale'])
+   for changed in [{'repository':'other/repo'},{'session_id':'../escape'}]:
+    self.assertIsNone(reader.read(task,None,'workspace',manual={**binding,**changed})['at'])
+   path.write_text(json.dumps({**record,'cwd':'other'}),encoding='utf-8')
+   self.assertIsNone(reader.read(task,None,'workspace',manual=binding)['at'])
  def test_real_events_and_stale_without_poll_heartbeat(self):
   with tempfile.TemporaryDirectory() as tmp:
    folder=Path(tmp)/'workspace';folder.mkdir()

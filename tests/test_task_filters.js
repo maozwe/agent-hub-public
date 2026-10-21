@@ -9,3 +9,7 @@ for(const [status,agent,expected] of cases){
   assert.deepEqual(Object.entries(filters).filter(([key,f])=>key!=='all'&&f.matches(task)).map(([key])=>key),[expected]);
 }
 console.log('PASS: all eight task/assignment cases map to exactly one status filter');
+
+const manual={status:'blocked',agent:'claude',activity:{manual:true}};
+assert.equal(filters.active.matches(manual),true);
+assert.equal(filters.waiting.matches(manual),false);
