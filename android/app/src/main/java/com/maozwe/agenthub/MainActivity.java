@@ -40,9 +40,18 @@ public class MainActivity extends ComponentActivity {
     private String origin;
     private boolean failed;
     private ActivityResultLauncher<String> notificationPermission;
+    private ActivityResultLauncher<String> microphonePermission;
+    private android.webkit.PermissionRequest pendingMicrophone;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        microphonePermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), allowed -> {
+            android.webkit.PermissionRequest request = pendingMicrophone; pendingMicrophone = null;
+            if (request == null) return;
+            if (allowed && web != null && ServerOrigin.allows(origin, request.getOrigin().toString()) && ServerOrigin.allows(origin, web.getUrl()))
+                request.grant(new String[]{android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            else request.deny();
+        });
         notificationPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), allowed -> {
             if (allowed) enablePush(); else pushMessage("אישור התראות נדחה. אפשר לשנות בהגדרות Android.");
         });
@@ -185,6 +194,21 @@ public class MainActivity extends ComponentActivity {
         settings.setSupportMultipleWindows(false);
         settings.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override public void onPermissionRequest(android.webkit.PermissionRequest request) {
+                runOnUiThread(() -> {
+                    if (!ServerOrigin.allows(origin,request.getOrigin().toString()) || !ServerOrigin.allows(origin,web.getUrl()) ||
+                        !java.util.Arrays.asList(request.getResources()).contains(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {request.deny();return;}
+                    if (pendingMicrophone != null) {request.deny();return;}
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
+                        request.grant(new String[]{android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                    else {pendingMicrophone=request;microphonePermission.launch(Manifest.permission.RECORD_AUDIO);}
+                });
+            }
+            @Override public void onPermissionRequestCanceled(android.webkit.PermissionRequest request) {
+                if (pendingMicrophone==request) pendingMicrophone=null;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (ServerOrigin.allows(origin, request.getUrl().toString())) return false;

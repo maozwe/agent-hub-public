@@ -140,7 +140,7 @@ function renderInbox(root=$('inbox'), questions=state.pending_questions) {
         const choice=el('button',(index+1)+'. '+option,'secondary');choice.dataset.answer=option;choice.type='button';choice.setAttribute('aria-pressed',String(option===input.value));
         choice.addEventListener('click',()=>{input.value=option;rememberAnswer();message.textContent='האפשרות נבחרה. לחצו על שליחת תשובה.';});choices.append(choice);
       }
-      const button=el('button','שליחת תשובה');button.type='submit';form.append(el('p',question.options.length?'בחרו אחת מתוך '+question.options.length+' אפשרויות, או כתבו תשובה:':'כתבו תשובה:','hint'),choices,label,button,message);
+      const button=el('button','שליחת תשובה');button.type='submit';form.append(el('p',question.options.length?'בחרו אחת מתוך '+question.options.length+' אפשרויות, או כתבו תשובה:':'כתבו תשובה:','hint'),choices,label,voiceControls(input,()=>({task_id:question.task_id})),button,message);
       form.addEventListener('submit',async event=>{
         event.preventDefault();if(button.disabled)return;
         if(!input.value.trim()){message.textContent='יש לבחור אפשרות או לכתוב תשובה לפני השליחה.';input.focus();return;}
@@ -169,7 +169,7 @@ function renderDetail() {
     const form=el('form'),label=el('label','הערה להמשך פעילות'),input=el('textarea'),button=el('button','שליחת הערה והמשך המשימה'),error=el('p',undefined,'error');
     input.maxLength=8000;input.rows=4;input.value=followupDrafts.get(task.id)||'';input.setAttribute('aria-label','הערה להמשך פעילות');
     input.addEventListener('input',()=>followupDrafts.set(task.id,input.value));button.type='submit';error.setAttribute('role','status');label.append(input);
-    form.append(label,el('p','ההערה תחזיר את אותה משימה לתור של הסוכן הראשי. התוצאות הקודמות יישמרו.','hint'),button,error);
+    form.append(label,voiceControls(input,()=>({task_id:task.id})),el('p','ההערה תחזיר את אותה משימה לתור של הסוכן הראשי. התוצאות הקודמות יישמרו.','hint'),button,error);
     form.addEventListener('submit',async event=>{event.preventDefault();if(!input.value.trim()){error.textContent='כתוב הערה לפני השליחה.';return;}button.disabled=true;
       try {await action({action:'followup',task_id:task.id,note:input.value});followupDrafts.delete(task.id);await refresh(true);feedback('ההערה נשמרה והמשימה הוחזרה לתור.');}
       catch(e){error.textContent=e.message;button.disabled=false;}
@@ -202,7 +202,7 @@ async function refresh(force=false) {
   try {
     const response=await fetch('/api/status'); if(!response.ok) throw new Error('חיבור לשרת');
     const next=await response.json(), signature=JSON.stringify(next);
-    if(force || (signature!==previous && !document.activeElement.closest('form'))) {state=next;previous=signature;render();}
+    if(force || (signature!==previous && !voiceBusy && !document.activeElement.closest('form'))) {state=next;previous=signature;render();}
     $('last-update').textContent='עודכן '+new Date().toLocaleTimeString('he-IL',{timeZone:'Asia/Jerusalem'});
     $('connection-status').textContent='חיבור פרטי תקין';document.querySelector('.connection').classList.remove('offline');document.body.classList.remove('hub-offline');
     if(connectionErrorShown) feedback('');
@@ -244,3 +244,5 @@ function setMobileView(view) {
   for(const button of document.querySelectorAll('.mobile-tabs button')) button.setAttribute('aria-pressed',String(button.dataset.view===view));
 }
 for(const button of document.querySelectorAll('.mobile-tabs button')) button.addEventListener('click',()=>setMobileView(button.dataset.view));
+
+$('request').after(voiceControls($('request'),()=>({repository:$('repository').value})));

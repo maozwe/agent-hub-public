@@ -16,6 +16,7 @@ from updates import VERSION, check_update
 from notifications import Push
 from worker import task_write_scope, parse_agent_response
 from activity import ActivityReader
+from voice import Voice
 
 ROOT = Path(__file__).resolve().parent
 
@@ -25,6 +26,7 @@ class Controller:
         self.config, self.config_path = config, config_path
         self.token = secrets.token_urlsafe(32)
         self.activity = ActivityReader()
+        self.voice = Voice()
         self.process = None
         self.log = None
         self.lock = threading.Lock()
@@ -119,6 +121,14 @@ class Controller:
 
     def action(self, data):
         action = data.get("action")
+        if action == 'voice_draft':
+            repository=data.get('repository')
+            context=''
+            if data.get('task_id'):
+                with closing(Hub(self.config['database'])) as hub:
+                    task=hub.task(data['task_id']);repository=task['repository'];context=task['request']
+            if repository not in self.config['repositories']: raise ValueError('בחר פרויקט מוכר')
+            return self.voice.draft(data.get('text'),self.config['repositories'][repository],context)
         if action == "push_register":
             return self.push.register(data.get("device"), data.get("token"))
         if action == "check_update":
@@ -196,6 +206,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, json.dumps(self.server.controller.status(), ensure_ascii=False))
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                 "/voice.js": ("voice.js", "text/javascript; charset=utf-8"),
                  "/task-filters.js": ("task-filters.js", "text/javascript; charset=utf-8"),
                  "/style.css": ("style.css", "text/css; charset=utf-8")}
         if self.path not in files:
@@ -214,6 +225,14 @@ class Handler(BaseHTTPRequestHandler):
         if (origin is None or self.headers.get("Origin") != origin or
                 not secrets.compare_digest(self.headers.get("X-Hub-CSRF", ""), self.server.controller.token)):
             return self.send(403, '{"error":"Invalid origin or request token"}')
+        if self.path == '/api/transcribe':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=5*1024*1024: raise ValueError('הקלטה גדולה מדי')
+                result=self.server.controller.voice.transcribe(self.rfile.read(length))
+                return self.send(200,json.dumps(result,ensure_ascii=False))
+            except Exception:
+                return self.send(400,json.dumps({'error':'התמלול המקומי לא הצליח. ודא שהמודל מותקן ושההקלטה קצרה מ־90 שניות, ונסה שוב.'},ensure_ascii=False))
         if self.path != "/api/action":
             return self.send(404, '{"error":"Not found"}')
         try:

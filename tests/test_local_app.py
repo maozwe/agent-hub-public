@@ -12,6 +12,17 @@ from local_app import make_server
 
 
 class LocalAppTests(unittest.TestCase):
+    def test_voice_upload_requires_auth_and_does_not_create_task(self):
+        from unittest.mock import patch
+        with self.assertRaises(HTTPError) as error:
+            urlopen(Request(self.base+'/api/transcribe',data=b'audio',headers={'Origin':self.base}))
+        self.assertEqual(error.exception.code,403)
+        with patch.object(self.server.controller.voice,'transcribe',return_value={'text':'Draft only'}):
+            headers={'Origin':self.base,'X-Hub-CSRF':self.server.controller.token}
+            with urlopen(Request(self.base+'/api/transcribe',data=b'audio',headers=headers)) as response:
+                self.assertEqual(json.load(response)['text'],'Draft only')
+        self.assertEqual(self.server.controller.status()['tasks'],[])
+
     def test_manual_completion_is_atomic_idempotent_and_does_not_claim_next(self):
         from unittest.mock import patch
         with closing(Hub(self.config['database'])) as hub:

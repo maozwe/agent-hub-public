@@ -43,3 +43,7 @@
 בדיקות שרת: `python -m unittest discover -s tests`. בדיקת דפדפן עם מסד זמני וללא worker: `python tests/serve_ui_fixture.py` (פורט 8891). נתוני בדיקה אינם משימות אמיתיות.
 
 `version.json` הוא מקור מספר הגרסה; `CHANGELOG.md` מסכם שינויים, ו־`VERSIONING.md` מגדיר את נוהל הגרסאות. כפתור בדיקת העדכון פונה ל־Release הציבורי האחרון בלבד ואינו מתקין תוכנה.
+
+## Local voice drafts
+
+Install requirements, then download the Whisper model once with `python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"`. Run Ollama locally with `gpt-oss:20b`. Voice recordings (90 seconds maximum) are transcribed on the Hub computer and are not saved. Drafts use a bounded sample of tracked files from the selected configured Git checkout; they do not fetch remote GitHub updates or execute model output. Review the draft before submitting. Android microphone support requires app version 0.12.0 or later.
