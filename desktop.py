@@ -32,7 +32,7 @@ def state(url):
     try:
         with urlopen(url + "/api/status", timeout=1) as response:
             data = json.load(response)
-        return data if data.get("worker", {}).get("read_only") is True else None
+        return data if data.get("worker", {}).get("read_only") in (True, False) else None
     except (OSError, ValueError):
         return None
 

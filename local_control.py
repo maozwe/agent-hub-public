@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent
 def running(url):
     try:
         with urlopen(url + "/api/status", timeout=2) as response:
-            return json.load(response).get("worker", {}).get("read_only") is True
+            return json.load(response).get("worker", {}).get("read_only") in (True, False)
     except (OSError, ValueError):
         return False
 

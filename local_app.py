@@ -14,6 +14,7 @@ import threading
 from hub import Hub
 from updates import VERSION, check_update
 from notifications import Push
+from worker import task_write_scope
 
 ROOT = Path(__file__).resolve().parent
 
@@ -74,9 +75,11 @@ class Controller:
         state["push"] = {"configured": self.push.enabled, "error": self.push.error}
         hostname = self.config.get("tailnet", {}).get("hostname")
         state["phone_url"] = f"https://{hostname}/" if hostname else None
+        write_tasks = [task["id"] for task in state["tasks"] if task["status"] != "completed"
+                       and task_write_scope(self.config, {"task": task})]
         state["worker"] = {"running": self.process is not None and self.process.poll() is None,
                            "exit_code": self.process.poll() if self.process else None,
-                           "read_only": True}
+                           "read_only": not write_tasks, "write_tasks": write_tasks}
         return state
 
     def action(self, data):

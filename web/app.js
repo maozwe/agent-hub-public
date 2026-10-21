@@ -121,6 +121,7 @@ function render() {
   $('phone-link').hidden=!state.phone_url;
   if(state.phone_url) $('phone-link').href=state.phone_url;
   $('task-count').textContent=state.tasks.length; $('pending-count').textContent=state.pending_questions.length; $('active-count').textContent=state.tasks.filter(t=>['working','testing','assigned'].includes(t.status)).length;
+  $('execution-mode').textContent=state.worker.read_only?'קריאה בלבד':'כתיבה מאושרת למשימות: '+state.worker.write_tasks.join(', ');
   $('worker-status').textContent=state.worker.running?'המפעיל המקומי פועל':'המפעיל המקומי עצור'; $('worker-toggle').textContent=state.worker.running?'עצירת המפעיל':'הפעלת המפעיל'; $('worker-toggle').disabled=false;
   const repo=$('repository'); if(!repo.options.length) for(const name of Object.keys(state.repositories)) {const option=el('option',name);option.value=name;repo.append(option);}
   const newAgent=$('new-agent');if(newAgent.options.length===1) for(const agent of state.agents){const option=el('option',agent.name);option.value=agent.name;newAgent.append(option);}
