@@ -1,0 +1,8 @@
+{
+  "database": "C:/path/hub.sqlite3",
+  "rutherford_command": "C:/path/rutherford-mcp-server.exe",
+  "agents": ["codex"],
+  "worker_agents": ["codex"],
+  "operator": "local-user",
+  "repositories": {"owner/repository": "C:/path/repository"}
+}

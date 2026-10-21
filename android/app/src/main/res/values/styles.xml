@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Agent Hub</string>
+    <string name="app_with_version">Agent Hub · %1$s</string>
+    <string name="invalid_address">הזינו כתובת HTTPS של שרת בלבד, ללא נתיב, פרטי כניסה או פרמטרים.</string>
+    <string name="encrypted_connection">חיבור מוצפן · %1$s</string>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#A8DBBB</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#171C20</item>
+        <item name="android:statusBarColor">#171C20</item>
+        <item name="android:navigationBarColor">#171C20</item>
+    </style>
+</resources>

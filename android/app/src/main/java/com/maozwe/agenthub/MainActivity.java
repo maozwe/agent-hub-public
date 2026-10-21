@@ -1,0 +1,166 @@
+package com.maozwe.agenthub;
+
+import android.annotation.SuppressLint;
+import android.graphics.Color;
+import android.content.Intent;
+import android.net.Uri;
+import android.net.http.SslError;
+import android.os.Bundle;
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
+import android.text.InputType;
+import android.view.View;
+import android.webkit.CookieManager;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import java.io.ByteArrayInputStream;
+import java.util.Collections;
+
+public class MainActivity extends ComponentActivity {
+    private static final int BACKGROUND = Color.rgb(23, 28, 32);
+    private static final int MINT = Color.rgb(168, 219, 187);
+    private LinearLayout root;
+    private WebView web;
+    private TextView status;
+    private String origin;
+    private boolean failed;
+
+    @Override public void onCreate(Bundle saved) {
+        super.onCreate(saved);
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BACKGROUND);
+        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            return insets;
+        });
+        setContentView(root);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {navigateBack();}
+        });
+        origin = getPreferences(MODE_PRIVATE).getString("server", "");
+        if (origin.isEmpty()) showSettings(); else openHub();
+    }
+
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private TextView text(String value, int size) {
+        TextView label = new TextView(this);
+        label.setText(value); label.setTextSize(size); label.setTextColor(Color.rgb(231, 237, 235));
+        label.setPadding(dp(16), dp(10), dp(16), dp(10));
+        return label;
+    }
+
+    private Button button(String value, View.OnClickListener action) {
+        Button button = new Button(this);
+        button.setText(value); button.setTextColor(MINT); button.setAllCaps(false);
+        button.setMinHeight(dp(48)); button.setOnClickListener(action);
+        return button;
+    }
+
+    private void clearScreen() {
+        if (web != null) {
+            root.removeView(web);web.stopLoading();web.destroy();web = null;
+        }
+        root.removeAllViews();
+    }
+
+    private void showSettings() {
+        clearScreen();
+        root.addView(text(getString(R.string.app_with_version, BuildConfig.VERSION_NAME), 27));
+        root.addView(text("מרכז החלטות · חיבור לשרת הפרטי", 17));
+        root.addView(text("הפעילו Tailscale בטלפון ובמחשב, והדביקו את כתובת ה־HTTPS שמופיעה בקישור לטלפון בווב. המחשב והיישום צריכים להישאר פועלים.", 14));
+        TextView label = text("כתובת שרת HTTPS", 14);root.addView(label);
+        EditText address = new EditText(this);
+        address.setId(View.generateViewId());label.setLabelFor(address.getId());
+        address.setSingleLine(true);address.setText(origin);address.setTextColor(Color.WHITE);
+        address.setHint("https://computer.example.ts.net");address.setHintTextColor(Color.GRAY);
+        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        address.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        address.setTextDirection(View.TEXT_DIRECTION_LTR);
+        address.setPadding(dp(16), dp(12), dp(16), dp(12));root.addView(address);
+        TextView error = text("", 13);error.setTextColor(Color.rgb(255, 170, 161));
+        error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        root.addView(button("שמירה וחיבור", view -> {
+            try {
+                String next = ServerOrigin.parse(address.getText().toString());
+                if (!next.equals(origin)) {CookieManager.getInstance().removeAllCookies(null);}
+                origin = next;getPreferences(MODE_PRIVATE).edit().putString("server", origin).apply();
+                openHub();
+            } catch (IllegalArgumentException invalid) {error.setText(R.string.invalid_address);}
+        }));
+        if (!origin.isEmpty()) root.addView(button("חזרה לשרת השמור", view -> openHub()));
+        root.addView(error);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled") // The selected Hub uses JS; no native bridge or local-file access exists.
+    private void openHub() {
+        clearScreen();failed = false;
+        LinearLayout toolbar = new LinearLayout(this);
+        toolbar.setOrientation(LinearLayout.HORIZONTAL);
+        TextView title = text(getString(R.string.app_with_version, BuildConfig.VERSION_NAME), 15);
+        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(54), 1));
+        toolbar.addView(button("שרת", view -> showSettings()));
+        toolbar.addView(button("רענון", view -> openHub()));root.addView(toolbar);
+        status = text("מתחבר לשרת הפרטי…", 11);
+        status.setTextColor(MINT);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        root.addView(status);
+        web = new WebView(this);web.setBackgroundColor(BACKGROUND);
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(false);
+        settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setSafeBrowsingEnabled(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        web.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (ServerOrigin.allows(origin, request.getUrl().toString())) return false;
+                if (request.hasGesture() && request.getUrl().toString().equals("https://github.com/maozwe/agent-hub-public/releases")) {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(request.getUrl().toString())));return true;
+                }
+                status.setText("הקישור מחוץ לשרת שנבחר ונחסם.");return true;
+            }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (ServerOrigin.allows(origin, request.getUrl().toString())) return null;
+                return new WebResourceResponse("text/plain", "UTF-8", 403, "Blocked",
+                        Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
+            }
+            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.cancel();connectionError("אימות תעודת השרת נכשל. בדקו את כתובת ה־HTTPS והתעודה במחשב.");
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) connectionError("אין חיבור לשרת. בדקו ש־Tailscale פעיל ושהמחשב והיישום פועלים.");
+            }
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                if (request.isForMainFrame()) connectionError(response.getStatusCode() == 403 ?
+                        "השרת דחה את החיבור. בדקו שהטלפון מחובר לחשבון Tailscale המורשה." : "השרת החזיר שגיאה. נסו לרענן.");
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                if (!failed && ServerOrigin.allows(origin, url)) status.setText(getString(R.string.encrypted_connection, origin));
+            }
+        });
+        root.addView(web, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+        web.loadUrl(origin + "/", Collections.singletonMap("X-Agent-Hub-Client-Version", BuildConfig.VERSION_NAME));
+    }
+
+    private void connectionError(String message) {
+        failed = true;status.setText(message);status.setTextColor(Color.rgb(255, 170, 161));
+    }
+
+    private void navigateBack() {if (web != null && web.canGoBack()) web.goBack();else finish();}
+    @Override protected void onDestroy() {clearScreen();super.onDestroy();}
+}
