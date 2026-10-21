@@ -850,3 +850,6 @@ footer {
 .task-filters{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.task-filters button{font-size:13px;min-height:44px}.task-filters button[aria-pressed="true"]{background:var(--mint,#a8dbbb);color:#171c20;border-color:#a8dbbb}
 
 .answer-form [aria-pressed="true"]{background:var(--mint);color:#171c20;border:2px solid var(--mint)}
+
+.answer-choices{display:flex;flex-direction:column;flex-wrap:nowrap;width:100%}
+.answer-choices button{flex:none;width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start;font-size:14px!important;line-height:1.6}

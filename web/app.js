@@ -112,17 +112,17 @@ function renderInbox(root=$('inbox'), questions=state.pending_questions) {
       form.noValidate=true;input.rows=3;input.required=true;input.maxLength=8000;input.setAttribute('aria-label','תשובה לשאלה '+question.id);
       input.value=answerDrafts.get(question.id)||'';label.append(input);
       const message=el('p',undefined,'hint');message.setAttribute('role','status');
-      const choices=el('div',undefined,'actions');
+      const choices=el('div',undefined,'actions answer-choices');
       function rememberAnswer() {
         answerDrafts.set(question.id,input.value);
-        for(const choice of choices.children) choice.setAttribute('aria-pressed',String(choice.textContent===input.value));
+        for(const choice of choices.children) choice.setAttribute('aria-pressed',String(choice.dataset.answer===input.value));
       }
       input.addEventListener('input',rememberAnswer);
-      for(const option of question.options) {
-        const choice=el('button',option,'secondary');choice.type='button';choice.setAttribute('aria-pressed',String(option===input.value));
+      for(const [index,option] of question.options.entries()) {
+        const choice=el('button',(index+1)+'. '+option,'secondary');choice.dataset.answer=option;choice.type='button';choice.setAttribute('aria-pressed',String(option===input.value));
         choice.addEventListener('click',()=>{input.value=option;rememberAnswer();message.textContent='האפשרות נבחרה. לחצו על שליחת תשובה.';});choices.append(choice);
       }
-      const button=el('button','שליחת תשובה');button.type='submit';form.append(choices,label,button,message);
+      const button=el('button','שליחת תשובה');button.type='submit';form.append(el('p',question.options.length?'בחרו אחת מתוך '+question.options.length+' אפשרויות, או כתבו תשובה:':'כתבו תשובה:','hint'),choices,label,button,message);
       form.addEventListener('submit',async event=>{
         event.preventDefault();if(button.disabled)return;
         if(!input.value.trim()){message.textContent='יש לבחור אפשרות או לכתוב תשובה לפני השליחה.';input.focus();return;}
