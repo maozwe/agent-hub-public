@@ -32,6 +32,7 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
     result=await rutherford_delegate(session,'claude','test',{'task':{'id':6}},scope)
     self.assertEqual(result['state'],'question')
     self.assertEqual(session.args['safety_mode'],mode)
+    self.assertEqual(session.args['timeout_s'],3600 if scope else 120)
     self.assertEqual(session.args['trust_workspace'],bool(scope))
     self.assertEqual(session.args['fallback'],[])
     self.assertEqual(session.args['direct_workspace_mutation'],bool(scope))

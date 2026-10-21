@@ -138,7 +138,7 @@ async def rutherford_delegate(session, agent, workspace, context, write_scope=""
         "safety_mode": "write" if write_scope else "read_only", "trust_workspace": bool(write_scope),
         "direct_workspace_mutation": bool(write_scope),
         "mode": "sync", "persist": True,
-        "timeout_s": 600 if write_scope else 120, "allow_model_fallback": False, "fallback": []})
+        "timeout_s": 3600 if write_scope else 120, "allow_model_fallback": False, "fallback": []})
     if result.isError:
         raise RuntimeError("Rutherford rejected the run")
     envelope = decode(result.structuredContent["result"])
