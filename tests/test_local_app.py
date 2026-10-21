@@ -68,6 +68,16 @@ class LocalAppTests(unittest.TestCase):
             self.assertIn('dir="rtl"', response.read().decode())
             self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
 
+    def test_push_registration_requires_csrf_and_never_exposes_tokens(self):
+        self.server.controller.push.settings = {"project_id": "test-project", "credentials": "not-used"}
+        data = {"action": "push_register", "device": "device-test-00001", "token": "a" * 40}
+        with self.assertRaises(HTTPError) as error: self.post(data, csrf=False)
+        self.assertEqual(error.exception.code, 403)
+        self.assertTrue(self.post(data)["enabled"])
+        with urlopen(self.base + "/api/status") as response:
+            self.assertNotIn("a" * 40, response.read().decode())
+        self.assertFalse(self.post({**data, "token": None})["enabled"])
+
     def test_native_client_version_is_bounded_before_inserting_into_html(self):
         for value, expected in [("0.1.0", 'id="client-version" value="0.1.0"'),
                                 ('\"><script>alert(1)</script>', 'id="client-version" value=""')]:

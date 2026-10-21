@@ -24,6 +24,11 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
+import android.Manifest;
+import android.os.Build;
+import android.content.pm.PackageManager;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 public class MainActivity extends ComponentActivity {
     private static final int BACKGROUND = Color.rgb(23, 28, 32);
@@ -33,9 +38,14 @@ public class MainActivity extends ComponentActivity {
     private TextView status;
     private String origin;
     private boolean failed;
+    private ActivityResultLauncher<String> notificationPermission;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        notificationPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), allowed -> {
+            if (allowed) enablePush(); else pushMessage("אישור התראות נדחה. אפשר לשנות בהגדרות Android.");
+        });
+        PushClient.channel(this);
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BACKGROUND);
@@ -78,6 +88,10 @@ public class MainActivity extends ComponentActivity {
 
     private void showSettings() {
         clearScreen();
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        LinearLayout content = new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(content);this.root.addView(scroll);
+        LinearLayout root = content;
         root.addView(text(getString(R.string.app_with_version, BuildConfig.VERSION_NAME), 27));
         root.addView(text("מרכז החלטות · חיבור לשרת הפרטי", 17));
         root.addView(text("הפעילו Tailscale בטלפון ובמחשב, והדביקו את כתובת ה־HTTPS שמופיעה בקישור לטלפון בווב. המחשב והיישום צריכים להישאר פועלים.", 14));
@@ -95,6 +109,9 @@ public class MainActivity extends ComponentActivity {
         root.addView(button("שמירה וחיבור", view -> {
             try {
                 String next = ServerOrigin.parse(address.getText().toString());
+                if (!next.equals(origin) && PushClient.enabled(this)) {
+                    error.setText("כבו קודם את הפוש לפני מעבר לשרת אחר.");return;
+                }
                 if (!next.equals(origin)) {CookieManager.getInstance().removeAllCookies(null);}
                 origin = next;getPreferences(MODE_PRIVATE).edit().putString("server", origin).apply();
                 openHub();
@@ -102,6 +119,27 @@ public class MainActivity extends ComponentActivity {
         }));
         if (!origin.isEmpty()) root.addView(button("חזרה לשרת השמור", view -> openHub()));
         root.addView(error);
+        root.addView(text("פוש שולח דרך Google הודעה כללית בלבד. פרטי המשימה נשארים בשרת הפרטי.", 13));
+        Button push = button(PushClient.enabled(this) ? "כיבוי התראות פוש" : "הפעלת התראות פוש", view -> {
+            if (!BuildConfig.PUSH_CONFIGURED) {pushMessage("בנייה זו אינה מחוברת ל־Firebase.");return;}
+            if (origin.isEmpty()) {pushMessage("שמרו קודם כתובת שרת.");return;}
+            if (PushClient.enabled(this)) {
+                PushClient.disable(this, success -> pushMessage(success ? "הפוש כובה" : "הכיבוי נכשל. בדקו חיבור לשרת ונסו שוב."));
+            } else if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+            } else enablePush();
+        });
+        root.addView(push);
+    }
+
+    private void enablePush() {
+        PushClient.enable(this, origin, success -> pushMessage(success ? "פוש הופעל. המחשב וה־Hub צריכים להישאר פועלים." : "הרישום נכשל. בדקו Tailscale והגדרות Firebase בשרת."));
+    }
+    private void pushMessage(String message) {
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            showSettings();android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show();
+        });
     }
 
     @SuppressLint("SetJavaScriptEnabled") // The selected Hub uses JS; no native bridge or local-file access exists.

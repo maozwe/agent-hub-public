@@ -1,5 +1,7 @@
 plugins { id 'com.android.application' }
 def hubVersion = new groovy.json.JsonSlurper().parse(file('../../version.json'))
+def firebaseFile = file('../firebase.local.json')
+def firebase = firebaseFile.exists() ? new groovy.json.JsonSlurper().parse(firebaseFile) : null
 android {
     namespace 'com.maozwe.agenthub'
     compileSdk { version = release(37) { minorApiLevel = 1 } }
@@ -10,12 +12,20 @@ android {
         versionCode hubVersion.code
         versionName hubVersion.version
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        buildConfigField 'boolean', 'PUSH_CONFIGURED', firebase != null ? 'true' : 'false'
+        if (firebase != null) {
+            resValue 'string', 'google_app_id', firebase.client[0].client_info.mobilesdk_app_id
+            resValue 'string', 'gcm_defaultSenderId', firebase.project_info.project_number
+            resValue 'string', 'google_api_key', firebase.client[0].api_key[0].current_key
+            resValue 'string', 'project_id', firebase.project_info.project_id
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    buildFeatures { buildConfig true }
+    buildFeatures { buildConfig true; resValues true }
     lint { abortOnError true; warningsAsErrors true }
 }
 dependencies {
     implementation 'androidx.activity:activity:1.13.0'
+    implementation 'com.google.firebase:firebase-messaging:26.0.0'
     testImplementation 'junit:junit:4.13.2'
 }

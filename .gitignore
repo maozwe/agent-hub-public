@@ -35,3 +35,6 @@ keystore.properties
 android/.gradle/
 android/**/build/
 android/local.properties
+android/firebase.local.json
+windows/build/
+*.spec

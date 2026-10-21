@@ -13,6 +13,7 @@ import threading
 
 from hub import Hub
 from updates import VERSION, check_update
+from notifications import Push
 
 ROOT = Path(__file__).resolve().parent
 
@@ -28,6 +29,7 @@ class Controller:
             for agent in config["agents"]:
                 if not hub.db.execute("SELECT 1 FROM agents WHERE name=?", (agent,)).fetchone():
                     hub.register_agent(agent, True)
+        self.push = Push(config)
 
     def start_worker(self):
         with self.lock:
@@ -35,14 +37,18 @@ class Controller:
                 return
             if not self.config_path:
                 raise ValueError("Worker configuration is unavailable")
+            if not self.config.get("worker_agents", self.config["agents"]) or not self.config.get("rutherford_command"):
+                raise ValueError("Import an operator configuration before starting the worker")
             if self.log:
                 self.log.close()
             log_path = Path(self.config["database"]).parent / "worker.log"
             self.log = log_path.open("a", encoding="utf-8")
+            command = ([sys.executable, "--worker"] if getattr(sys, "frozen", False)
+                       else [sys.executable, str(ROOT / "worker.py")])
             self.process = subprocess.Popen(
-                [sys.executable, str(ROOT / "worker.py"), "--config", str(self.config_path)],
+                [*command, "--config", str(self.config_path)],
                 cwd=ROOT, stdout=self.log, stderr=self.log,
-                env={**os.environ, "PYTHONUTF8": "1"},
+                env={**os.environ, "PYTHONUTF8": "1", "HUB_LOG_PATH": str(log_path)},
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def stop_worker(self):
@@ -65,6 +71,7 @@ class Controller:
             state["agents"] = [dict(row) for row in hub.db.execute("SELECT * FROM agents ORDER BY name")]
         state["repositories"] = self.config["repositories"]
         state["version"] = VERSION
+        state["push"] = {"configured": self.push.enabled, "error": self.push.error}
         hostname = self.config.get("tailnet", {}).get("hostname")
         state["phone_url"] = f"https://{hostname}/" if hostname else None
         state["worker"] = {"running": self.process is not None and self.process.poll() is None,
@@ -74,6 +81,8 @@ class Controller:
 
     def action(self, data):
         action = data.get("action")
+        if action == "push_register":
+            return self.push.register(data.get("device"), data.get("token"))
         if action == "check_update":
             return check_update(data.get("client_version"))
         if action == "start_worker":
@@ -205,11 +214,13 @@ def main():
     control.write_text(json.dumps({"url": f"http://127.0.0.1:{server.server_port}",
                                   "token": server.controller.token}), encoding="utf-8")
     try:
+        server.controller.push.start()
         if not args.no_worker:
             server.controller.start_worker()
         print(f"Agent Hub: http://127.0.0.1:{server.server_port}", flush=True)
         server.serve_forever()
     finally:
+        server.controller.push.close()
         server.controller.stop_worker()
         server.server_close()
         control.unlink(missing_ok=True)
