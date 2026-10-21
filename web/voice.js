@@ -26,7 +26,7 @@ function voiceControls(input, context) {
         } catch(e){message.textContent=e.message;} finally {chunks=[];record.textContent='🎙 הקלטה';record.disabled=draft.disabled=false;voiceBusy=false;}
       };
       recorder.start();record.disabled=false;record.textContent='עצירה ותמלול';message.textContent='מקליט — עד 90 שניות. האודיו מועבר רק למחשב שלך.';timer=setTimeout(stop,90000);
-    } catch(e){stop();voiceBusy=false;record.disabled=false;message.textContent=e.name==='NotAllowedError'?'יש לאשר גישה למיקרופון כדי להקליט.':e.message;}
+    } catch(e){stop();voiceBusy=false;record.disabled=false;message.textContent=e.name==='NotAllowedError'?'יש לאשר גישה למיקרופון כדי להקליט.':e.name==='NotReadableError'?'לא ניתן לפתוח את המיקרופון. ודא שהאפליקציה מעודכנת ושאין שיחה או הקלטה אחרת פעילה, ונסה שוב.':e.message;}
   });
   draft.addEventListener('click',async()=>{
     if(voiceBusy)return;
