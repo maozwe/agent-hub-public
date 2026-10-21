@@ -121,14 +121,6 @@ class Controller:
 
     def action(self, data):
         action = data.get("action")
-        if action == 'voice_draft':
-            repository=data.get('repository')
-            context=''
-            if data.get('task_id'):
-                with closing(Hub(self.config['database'])) as hub:
-                    task=hub.task(data['task_id']);repository=task['repository'];context=task['request']
-            if repository not in self.config['repositories']: raise ValueError('בחר פרויקט מוכר')
-            return self.voice.draft(data.get('text'),self.config['repositories'][repository],context)
         if action == "push_register":
             return self.push.register(data.get("device"), data.get("token"))
         if action == "check_update":

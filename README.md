@@ -46,4 +46,4 @@
 
 ## Local voice drafts
 
-Install requirements, then download the Whisper model once with `python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"`. Run Ollama locally with `gpt-oss:20b`. Voice recordings (90 seconds maximum) are transcribed on the Hub computer and are not saved. Drafts use a bounded sample of tracked files from the selected configured Git checkout; they do not fetch remote GitHub updates or execute model output. Review the draft before submitting. Android microphone support requires app version 0.12.0 or later.
+Install requirements, then download the Whisper model once with `python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"`. Voice recordings (90 seconds maximum) are transcribed on the Hub computer and are not saved. Review and edit the transcript before submitting. No Ollama text-model connection is used. Android microphone support requires app version 0.12.0 or later.
