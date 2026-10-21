@@ -76,7 +76,7 @@ class Controller:
             runs = [run for run in state.get("runs", []) if run["task_id"] == task["id"]]
             run = max(runs, key=lambda r:r["turn"]) if runs else None
             task["activity"] = self.activity.read(task, run, self.config["repositories"].get(task["repository"], ""),
-                manual=self.config.get("manual_sessions", {}).get(str(task["id"])))
+                manual=None if any(q['task_id']==task['id'] and q['kind']=='followup' for q in state['questions']) else self.config.get("manual_sessions", {}).get(str(task["id"])))
             self.sync_manual_completion(task)
             if task['status']=='completed':
                 task['activity']['manual']=False
@@ -144,6 +144,8 @@ class Controller:
                     return hub.set_participants(task["id"], data.get("participants", []))
             if action == "participants":
                 return hub.set_participants(data["task_id"], data["participants"])
+            if action == "followup":
+                return hub.follow_up(data['task_id'],data['note'],self.config['operator'])
             if action == "assign":
                 if data["agent"] not in self.config["agents"]:
                     raise ValueError("Unknown agent")

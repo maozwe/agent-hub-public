@@ -188,6 +188,20 @@ class Hub:
             question["options"] = json.loads(question["options"])
         return {"task": task, "questions": questions}
 
+    def follow_up(self, task_id, note, actor):
+        note=self.text(note); actor=self.text(actor)
+        if len(note)>8000: raise ValueError('הערת ההמשך ארוכה מדי')
+        with self.transaction():
+            task=self.task(task_id)
+            if task['status']!='completed': raise ValueError('ניתן לשלוח המשך רק למשימה שהושלמה')
+            if self.db.execute("SELECT 1 FROM questions WHERE task_id=? AND kind='approval' AND answer='denied'",(task_id,)).fetchone():
+                raise ValueError('Denied approval blocks this task')
+            self.db.execute("INSERT INTO questions(task_id,agent,question,options,kind,answer,decided_by,decided_at) "
+                "VALUES(?,?,?,'[]','followup',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                (task_id,task['agent'],'תוצאה לפני ההמשך:\n'+(task['verification'] or ''),note,actor))
+            self.db.execute("UPDATE tasks SET status='queued',verification=NULL,blocked_reason=NULL WHERE id=?",(task_id,))
+            return self.task(task_id)
+
     def ask(self, task_id, agent, question, options):
         with self.transaction():
             return self._ask(task_id, agent, question, options)

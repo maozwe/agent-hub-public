@@ -1,6 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const answerDrafts = new Map();
+const followupDrafts = new Map();
 const labels = {queued:'בתור', assigned:'נלקחה לסוכן', working:'בעבודה', testing:'באימות', waiting_for_user:'ממתינה לתשובה', completed:'הושלמה', blocked:'חסומה'};
 let state, selected = null, stopped = false, previous = '', taskFilter = 'all', connectionErrorShown = false;
 function el(tag, text, className) { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(className) node.className=className; return node; }
@@ -164,8 +165,18 @@ function renderDetail() {
   root.append(participantsEditor(task));
   if(task.blocked_reason) root.append(el('h3',task.activity?.manual?'סיבת עצירת ההרצה הקודמת ב־Hub':'סיבת החסם'),el('pre',task.blocked_reason));
   if(task.verification) root.append(el('h3','תיעוד האימות'),el('pre',task.verification));
+  if(task.status==='completed') {
+    const form=el('form'),label=el('label','הערה להמשך פעילות'),input=el('textarea'),button=el('button','שליחת הערה והמשך המשימה'),error=el('p',undefined,'error');
+    input.maxLength=8000;input.rows=4;input.value=followupDrafts.get(task.id)||'';input.setAttribute('aria-label','הערה להמשך פעילות');
+    input.addEventListener('input',()=>followupDrafts.set(task.id,input.value));button.type='submit';error.setAttribute('role','status');label.append(input);
+    form.append(label,el('p','ההערה תחזיר את אותה משימה לתור של הסוכן הראשי. התוצאות הקודמות יישמרו.','hint'),button,error);
+    form.addEventListener('submit',async event=>{event.preventDefault();if(!input.value.trim()){error.textContent='כתוב הערה לפני השליחה.';return;}button.disabled=true;
+      try {await action({action:'followup',task_id:task.id,note:input.value});followupDrafts.delete(task.id);await refresh(true);feedback('ההערה נשמרה והמשימה הוחזרה לתור.');}
+      catch(e){error.textContent=e.message;button.disabled=false;}
+    });root.append(form);
+  }
   for(const question of state.questions.filter(q=>q.task_id===task.id)) {
-    const card=el('article',undefined,'question'); card.append(el('h3',question.kind==='approval'?'החלטת אישור':'שאלה ותשובה'),el('p',question.question));
+    const card=el('article',undefined,'question'); card.append(el('h3',question.kind==='followup'?'הערת המשך שלך':question.kind==='approval'?'החלטת אישור':'שאלה ותשובה'),el('p',question.question));
     const answer=question.answer==='approved'?'אושר':question.answer==='denied'?'נדחה':question.answer;
     card.append(el('p',answer||'ממתינה לתשובה')); if(question.decided_by) card.append(el('div',question.decided_by+' · '+localTime(question.decided_at),'meta'));root.append(card);
   }

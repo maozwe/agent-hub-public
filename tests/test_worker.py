@@ -7,6 +7,25 @@ from worker import Worker
 
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_followup_preserves_history_and_runs_once(self):
+        with tempfile.TemporaryDirectory() as directory, closing(Hub(str(Path(directory)/'hub.sqlite3'))) as hub:
+            hub.register_agent('codex',True);task=hub.create_task('owner/repo','Check');hub.assign(task['id'],'codex')
+            calls=[]
+            async def delegate(agent,workspace,context):
+                calls.append(context)
+                return {'state':'completed','summary':'Done','verification':'Verified '+str(len(calls))}
+            worker=Worker(str(Path(directory)/'hub.sqlite3'),{'owner/repo':directory},delegate)
+            await worker.tick('codex')
+            hub.follow_up(task['id'],'Check another case','owner')
+            with self.assertRaises(ValueError): hub.follow_up(task['id'],'Duplicate','owner')
+            await worker.tick('codex');await worker.tick('codex')
+            self.assertEqual(len(calls),2)
+            note=calls[1]['questions'][0]
+            self.assertEqual(note['kind'],'followup');self.assertEqual(note['answer'],'Check another case')
+            self.assertIn('Verified 1',note['question'])
+            self.assertEqual(hub.task(task['id'])['verification'],'Verified 2')
+            self.assertEqual(len(hub.status()['tasks']),1)
+
     async def test_manual_assignment_launch_wait_answer_continue_and_no_duplicate(self):
         with tempfile.TemporaryDirectory() as directory, closing(Hub(str(Path(directory) / "hub.sqlite3"))) as hub:
             database = str(Path(directory) / "hub.sqlite3")
