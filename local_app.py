@@ -156,6 +156,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, json.dumps(self.server.controller.status(), ensure_ascii=False))
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                 "/task-filters.js": ("task-filters.js", "text/javascript; charset=utf-8"),
                  "/style.css": ("style.css", "text/css; charset=utf-8")}
         if self.path not in files:
             return self.send(404, '{"error":"Not found"}')

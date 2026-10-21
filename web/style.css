@@ -847,3 +847,4 @@ footer {
 
 }
 .heading-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.task-filters{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.task-filters button{font-size:13px;min-height:44px}.task-filters button[aria-pressed="true"]{background:var(--mint,#a8dbbb);color:#171c20;border-color:#a8dbbb}

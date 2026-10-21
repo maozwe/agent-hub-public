@@ -1,9 +1,9 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const labels = {queued:'בתור', assigned:'נלקחה לסוכן', working:'בעבודה', testing:'באימות', waiting_for_user:'ממתינה לתשובה', completed:'הושלמה', blocked:'חסומה'};
-let state, selected = null, stopped = false, previous = '';
+let state, selected = null, stopped = false, previous = '', taskFilter = 'all', connectionErrorShown = false;
 function el(tag, text, className) { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(className) node.className=className; return node; }
-function feedback(message, error=false) { $('feedback').textContent=message; $('feedback').className=error?'error':''; }
+function feedback(message, error=false) { connectionErrorShown=false; $('feedback').textContent=message; $('feedback').className=error?'error':''; }
 async function action(data) {
   const response=await fetch('/api/action',{method:'POST', headers:{'Content-Type':'application/json','X-Hub-CSRF':document.querySelector('meta[name="hub-csrf"]').content},body:JSON.stringify(data)});
   const result=await response.json(); if(!response.ok) throw new Error(response.status===403?'היישום הופעל מחדש או שהחיבור אינו מורשה. רעננו את הדף ובדקו את החיבור.':result.error || 'הפעולה לא נשמרה'); return result;
@@ -50,8 +50,17 @@ function renderActive() {
 }
 function renderTasks() {
   const root=$('tasks'); root.replaceChildren();
+  const filters=$('task-filters');filters.replaceChildren();
+  for(const [key,filter] of Object.entries(taskFilters)) {
+    const button=el('button',filter.label+' ('+state.tasks.filter(filter.matches).length+')','secondary');
+    button.type='button';button.setAttribute('aria-pressed',String(taskFilter===key));
+    button.addEventListener('click',()=>{taskFilter=key;renderTasks();filters.querySelector('[aria-pressed="true"]').focus();});filters.append(button);
+  }
+  const visible=state.tasks.filter(taskFilters[taskFilter].matches);
+  $('filter-result').textContent='מוצגות '+visible.length+' מתוך '+state.tasks.length+' משימות';
   if(!state.tasks.length) { root.append(el('p','אין משימות עדיין. צרו משימה ואז שייכו לה סוכן.','empty')); return; }
-  for(const task of state.tasks) {
+  if(!visible.length) root.append(el('p','אין משימות בסינון שנבחר.','empty'));
+  for(const task of visible) {
     const row=el('article',undefined,'task'), top=el('div',undefined,'task-top'), title=el('button',task.request.length>110?task.request.slice(0,110)+'…':task.request,'task-title');
     title.type='button'; title.addEventListener('click',()=>selectTask(task));
     if(['assigned','working','testing'].includes(task.status)) row.classList.add('active-task');
@@ -117,7 +126,8 @@ async function refresh(force=false) {
     if(force || (signature!==previous && !document.activeElement.closest('form'))) {state=next;previous=signature;render();}
     $('last-update').textContent='עודכן '+new Date().toLocaleTimeString('he-IL',{timeZone:'Asia/Jerusalem'});
     $('connection-status').textContent='חיבור פרטי תקין';document.querySelector('.connection').classList.remove('offline');
-  } catch(error) {$('connection-status').textContent='אין חיבור לשרת';document.querySelector('.connection').classList.add('offline');feedback('אין חיבור ליישום המקומי. בדקו שהמחשב, היישום ו־Tailscale פועלים.',true);}
+    if(connectionErrorShown) feedback('');
+  } catch(error) {$('connection-status').textContent='אין חיבור לשרת';document.querySelector('.connection').classList.add('offline');feedback('אין חיבור ליישום המקומי. בדקו שהמחשב, היישום ו־Tailscale פועלים.',true);connectionErrorShown=true;}
 }
 $('create-form').addEventListener('submit',async event=>{
   event.preventDefault(); const button=event.submitter;

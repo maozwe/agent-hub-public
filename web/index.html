@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="he" dir="rtl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="hub-csrf" content="__CSRF__"><meta name="color-scheme" content="dark"><title>Agent Hub — מרכז החלטות</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="hub-csrf" content="__CSRF__"><meta name="color-scheme" content="dark"><title>Agent Hub — מרכז החלטות</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script src="/task-filters.js" defer></script><script src="/app.js" defer></script></head>
 <body>
 <input type="hidden" id="client-version" value="__CLIENT_VERSION__">
 <header class="app-bar"><a class="brand" href="#"><span class="brand-symbol" aria-hidden="true">▦</span><span><b lang="en">Agent Hub</b><small>סביבת עבודה מקומית</small></span></a><nav aria-label="ניווט ראשי"><a href="#inbox-section">החלטות</a><a href="#tasks-section">משימות</a><a href="#agents-section">סוכנים</a></nav><div class="connection"><span class="connection-dot"></span><span id="connection-status" role="status">מתחבר לשרת</span></div></header>
@@ -10,7 +10,7 @@
 <section id="active-work" class="active-work" aria-labelledby="active-title"><h2 id="active-title">בעבודה עכשיו</h2><div id="active-tasks"><p class="empty">טוען מצב משימות…</p></div></section>
 <div class="decision-layout"><div>
 <section id="inbox-section" aria-labelledby="inbox-title"><div class="decision-heading"><strong id="pending-count">0</strong><div><h2 id="inbox-title">החלטות שפותחות את ההמשך</h2><p class="muted">השאלות והאישורים שממתינים לתשובה שלך</p></div></div><div id="inbox"><p class="empty">טוען שאלות…</p></div></section>
-<section id="tasks-section" class="surface" aria-labelledby="tasks-title"><div class="section-heading"><h2 id="tasks-title">התמונה שמסביב</h2><button id="refresh" class="quiet" type="button">רענון</button></div><div class="metrics"><span><b id="task-count">0</b> משימות</span><span><b id="active-count">0</b> בטיפול</span></div><div id="tasks"><p class="empty">טוען משימות…</p></div></section>
+<section id="tasks-section" class="surface" aria-labelledby="tasks-title"><div class="section-heading"><h2 id="tasks-title">התמונה שמסביב</h2><button id="refresh" class="quiet" type="button">רענון</button></div><div class="metrics"><span><b id="task-count">0</b> משימות</span><span><b id="active-count">0</b> בטיפול</span></div><div id="task-filters" class="task-filters" role="group" aria-label="סינון משימות"></div><p id="filter-result" class="hint" role="status" aria-live="polite"></p><div id="tasks"><p class="empty">טוען משימות…</p></div></section>
 <section id="detail" class="surface" aria-labelledby="detail-title"><h2 id="detail-title">פרטי משימה</h2><p class="empty">בחרו משימה כדי לראות את הבקשה, הסוכנים ותוצאות ההפעלה.</p></section>
 </div><aside>
 <section id="agents-section" class="surface" aria-labelledby="agents-title"><div class="section-heading"><h2 id="agents-title">הסוכנים</h2><small class="muted">שיוך ידני</small></div><div id="agents"></div><p class="hint">רישום הסוכן אינו בדיקת חיבור חיה. תוצאת ההפעלה מופיעה במשימה.</p></section>
