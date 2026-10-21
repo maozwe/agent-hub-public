@@ -48,6 +48,8 @@ class ActivityReader:
             result['manual'] = True
         if not run: return result
         result['started_at'] = run['started_at']
+        if task['agent']=='codex':
+            return self.read_codex(task,run,workspace,now,result)
         if task['agent'] != 'claude': return result
         key = (task['id'], run['started_at'], workspace)
         path = self.sessions.get(key)
@@ -98,4 +100,45 @@ class ActivityReader:
                     age=max(0,int(now-latest[0]));result.update(source='claude',summary=latest[2],at=latest[1],age_seconds=age,
                         stale=(bool(manual) or task['status'] in {'working','testing','assigned'}) and age>=120)
         except (OSError,ValueError,TypeError): pass
+        return result
+
+    def read_codex(self,task,run,workspace,now,result):
+        key=('codex',task['id'],run['started_at'],workspace)
+        try:
+            path=self.sessions.get(key)
+            if path is None:
+                folder=Path.home()/'.codex/sessions'/datetime.fromtimestamp(timestamp(run['started_at'])).strftime('%Y/%m/%d')
+                for candidate in sorted(folder.glob('*.jsonl'),key=lambda p:p.stat().st_mtime,reverse=True):
+                    with candidate.open(encoding='utf-8') as f: head=f.read(524288)
+                    records=[]
+                    for line in head.splitlines():
+                        try: records.append(json.loads(line))
+                        except ValueError: continue
+                    if not any(r.get('type')=='session_meta' and os.path.normcase(r.get('payload',{}).get('cwd',''))==os.path.normcase(workspace) and timestamp(r['timestamp'])>=timestamp(run['started_at']) for r in records): continue
+                    for r in records:
+                        p=r.get('payload',{})
+                        if p.get('role')!='user': continue
+                        for b in p.get('content',[]):
+                            text=b.get('text','')
+                            if not text.startswith('This is the WORKER execution route,'): continue
+                            try: context=json.loads(text.split('All questions and decisions from earlier turns are included below.\n',1)[1])
+                            except (ValueError,IndexError): continue
+                            if context.get('task',{}).get('id')==task['id']: path=candidate;self.sessions[key]=path
+                    if path: break
+            if not path: return result
+            with path.open('rb') as f:
+                f.seek(max(0,path.stat().st_size-2097152));lines=f.read().decode('utf-8',errors='replace').splitlines()
+            for line in lines:
+                try: r=json.loads(line)
+                except ValueError: continue
+                p=r.get('payload',{}); kind=p.get('type'); summary=None
+                if r.get('type')=='response_item':
+                    if kind in {'function_call','custom_tool_call'}: summary='הפעלת כלי ובדיקת קבצי הפרויקט'
+                    elif kind in {'function_call_output','custom_tool_call_output'}: summary='התקבלה תוצאת כלי'
+                    elif kind=='message' and p.get('role')=='assistant': summary='התקבל דיווח מ־Codex'
+                if r.get('type')=='event_msg' and kind=='task_complete': summary='Codex סיים את תור הבדיקה'
+                if summary and timestamp(r['timestamp'])>=timestamp(run['started_at']):
+                    age=max(0,int(now-timestamp(r['timestamp'])))
+                    result.update(source='codex',summary=summary,at=r['timestamp'],age_seconds=age,stale=task['status'] in {'working','testing','assigned'} and age>=120)
+        except (OSError,ValueError,TypeError,KeyError): pass
         return result
