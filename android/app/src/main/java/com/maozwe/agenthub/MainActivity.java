@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
 import android.text.InputType;
 import android.view.View;
+import android.view.MotionEvent;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceError;
@@ -154,7 +155,27 @@ public class MainActivity extends ComponentActivity {
         status = text("מתחבר לשרת הפרטי…", 11);
         status.setTextColor(MINT);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         root.addView(status);
-        web = new WebView(this);web.setBackgroundColor(BACKGROUND);
+        web = new WebView(this) {
+            private float startX, startY;
+            private boolean beganAtBottom;
+            @Override public boolean dispatchTouchEvent(MotionEvent event) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    startX = event.getX();startY = event.getY();beganAtBottom = !canScrollVertically(1);
+                }
+                if (event.getPointerCount() != 1 || event.getActionMasked() == MotionEvent.ACTION_CANCEL) beganAtBottom = false;
+                if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                    boolean refresh = !canScrollVertically(1) && PullUpRefresh.matches(beganAtBottom,
+                        startX, startY, event.getX(), event.getY(), dp(96));
+                    beganAtBottom = false;
+                    if (refresh) {
+                        MotionEvent cancel = MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);
+                        super.dispatchTouchEvent(cancel);cancel.recycle();
+                        status.setText("מרענן את המסך…");post(() -> openHub());return true;
+                    }
+                }
+                return super.dispatchTouchEvent(event);
+            }
+        };web.setBackgroundColor(BACKGROUND);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(false);

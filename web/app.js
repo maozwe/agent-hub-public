@@ -138,6 +138,7 @@ $('check-update').addEventListener('click',async event=>{
   finally{button.disabled=false;}
 });
 $('refresh').addEventListener('click',()=>refresh(true));
+$('refresh-page').addEventListener('click',()=>location.reload());
 $('worker-toggle').addEventListener('click',event=>save({action:state.worker.running?'stop_worker':'start_worker'},event.currentTarget));
 $('shutdown').addEventListener('click',async event=>{
   event.currentTarget.disabled=true;

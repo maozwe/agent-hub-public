@@ -44,7 +44,7 @@ def launcher():
     config = initialize(data)
     root = tk.Tk()
     root.title("Agent Hub " + VERSION["version"])
-    root.geometry("540x530")
+    root.geometry("540x580")
     root.configure(bg="#171c20")
     label = tk.StringVar(value="בחרו פתיחת Hub קיים או שרת בדיקה נפרד")
     notify = tk.BooleanVar(value=False)
@@ -55,6 +55,14 @@ def launcher():
     def guarded(action):
         try: action()
         except Exception as error: messagebox.showerror("Agent Hub", str(error), parent=root)
+    def refresh_status():
+        current = state(f"http://127.0.0.1:{port.get()}")
+        if current is None:
+            status(f"אין חיבור לשרת בפורט {port.get()}. ודאו שה־Hub פועל.")
+        else:
+            status(f"עודכן כעת · שרת {port.get()} · גרסה {current['version']['version']}\n"
+                   f"{len(current['repositories'])} ריפואים · {len(current['tasks'])} משימות · "
+                   f"{len(current['pending_questions'])} החלטות ממתינות")
     def start():
         port.set(8892)
         url = "http://127.0.0.1:8892"
@@ -93,6 +101,7 @@ def launcher():
         status("הגדרות הועתקו; הנתונים נפרדים וה־worker יופעל רק מהווב")
     tk.Label(root, text="מרכז החלטות · " + VERSION["version"], font=("Segoe UI", 22), bg="#171c20", fg="#a8dbbb").pack(pady=18)
     for title, action in [("פתיחת ה־Hub הקיים (8876)", lambda: webbrowser.open("http://127.0.0.1:8876/")),
+                          ("↻ רענון מצב ה־Hub", refresh_status),
                           ("הפעלת שרת בדיקה נפרד (8892)", start), ("עצירת שרת הבדיקה", stop),
                           ("ייבוא הגדרות סוכנים וריפוזיטוריז", configure),
                           ("פתיחת תיקיית נתונים ולוגים", lambda: os.startfile(data))]:
