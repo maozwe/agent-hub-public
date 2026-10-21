@@ -98,7 +98,7 @@ function renderDetail() {
   }
 }
 function render() {
-  if(state.version){$('current-version').textContent=$('client-version').value||state.version.version;$('server-version').textContent='גרסת שרת: '+state.version.version;$('version-changes').replaceChildren(...state.version.changes.map(change=>el('li',change)));}
+  if(state.version){const current=$('client-version').value||state.version.version;$('current-version').textContent=current;$('server-version').textContent='גרסת שרת: '+state.version.version;$('version-changes').replaceChildren(...state.version.changes.map(change=>el('li',change)));document.querySelector('.brand small').textContent='מרכז החלטות · v'+current;}
   $('phone-link').hidden=!state.phone_url;
   if(state.phone_url) $('phone-link').href=state.phone_url;
   $('task-count').textContent=state.tasks.length; $('pending-count').textContent=state.pending_questions.length; $('active-count').textContent=state.tasks.filter(t=>['working','testing','assigned'].includes(t.status)).length;
