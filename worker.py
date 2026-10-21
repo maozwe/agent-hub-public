@@ -116,7 +116,7 @@ def task_write_scope(config, context):
 
 async def rutherford_delegate(session, agent, workspace, context, write_scope=""):
     execution = ("You may implement only this operator-authorized scope: " + write_scope +
-                 ". Preserve existing changes. Do not publish releases, push, or deploy. "
+                 ". Work directly in the supplied working directory; do not create temporary worktrees or copies. Preserve existing changes. Do not publish releases, push, or deploy. "
                  if write_scope else "You are executing in read-only mode. Do not edit, deploy, or merge. ")
     prompt = (
         "This is the WORKER execution route, not a direct_mcp session. "
@@ -136,6 +136,7 @@ async def rutherford_delegate(session, agent, workspace, context, write_scope=""
     result = await session.call_tool("delegate", {
         "cli": agent, "prompt": prompt, "working_dir": workspace,
         "safety_mode": "write" if write_scope else "read_only", "trust_workspace": bool(write_scope),
+        "direct_workspace_mutation": bool(write_scope),
         "mode": "sync", "persist": True,
         "timeout_s": 600 if write_scope else 120, "allow_model_fallback": False, "fallback": []})
     if result.isError:

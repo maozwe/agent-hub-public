@@ -34,4 +34,4 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(session.args['safety_mode'],mode)
     self.assertEqual(session.args['trust_workspace'],bool(scope))
     self.assertEqual(session.args['fallback'],[])
-    self.assertNotIn('direct_workspace_mutation',session.args)
+    self.assertEqual(session.args['direct_workspace_mutation'],bool(scope))
