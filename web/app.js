@@ -1,5 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
+const answerDrafts = new Map();
 const labels = {queued:'בתור', assigned:'נלקחה לסוכן', working:'בעבודה', testing:'באימות', waiting_for_user:'ממתינה לתשובה', completed:'הושלמה', blocked:'חסומה'};
 let state, selected = null, stopped = false, previous = '', taskFilter = 'all', connectionErrorShown = false;
 function el(tag, text, className) { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(className) node.className=className; return node; }
@@ -41,6 +42,7 @@ async function answerQuestion(data, button) {
     const remaining=state.pending_questions.filter(q=>q.task_id===Number($('answer-dialog').dataset.taskId));
     if(remaining.length) renderInbox($('answer-content'),remaining);else $('answer-dialog').close();
   }
+  return result;
 }
 function localTime(value) { const utc=value.includes('T')?value:value.replace(' ','T')+'Z';return new Date(utc).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem'}); }
 function meta(task) { const node=el('div',undefined,'meta'); node.append(el('span',task.repository,'repo'),el('span','#'+task.id),el('span',task.agent||'טרם שויך סוכן'),el('span','עדיפות '+task.priority)); return node; }
@@ -106,10 +108,30 @@ function renderInbox(root=$('inbox'), questions=state.pending_questions) {
       const actions=el('div',undefined,'actions');
       for(const [decision,text] of [['approved','אישור הבקשה'],['denied','דחיית הבקשה']]) { const button=el('button',text,decision==='denied'?'danger':''); button.type='button'; button.addEventListener('click',()=>answerQuestion({action:'decide',question_id:question.id,decision},button)); actions.append(button); } card.append(actions);
     } else {
-      const form=el('form',undefined,'answer-form'), label=el('label','התשובה שלך'), input=el('input'); input.required=true; input.maxLength=8000; input.setAttribute('aria-label','תשובה לשאלה '+question.id); label.append(input);
-      const button=el('button','שליחת תשובה'); button.type='submit'; form.append(label,button);
-      form.addEventListener('submit',event=>{event.preventDefault(); answerQuestion({action:'answer',question_id:question.id,answer:input.value},button);}); card.append(form);
-      if(question.options.length) { const choices=el('div',undefined,'actions'); for(const option of question.options) { const choice=el('button',option,'secondary'); choice.type='button'; choice.addEventListener('click',()=>{input.value=option;input.focus();}); choices.append(choice); } card.append(choices); }
+      const form=el('form',undefined,'answer-form'), label=el('label','התשובה שלך'), input=el('textarea');
+      form.noValidate=true;input.rows=3;input.required=true;input.maxLength=8000;input.setAttribute('aria-label','תשובה לשאלה '+question.id);
+      input.value=answerDrafts.get(question.id)||'';label.append(input);
+      const message=el('p',undefined,'hint');message.setAttribute('role','status');
+      const choices=el('div',undefined,'actions');
+      function rememberAnswer() {
+        answerDrafts.set(question.id,input.value);
+        for(const choice of choices.children) choice.setAttribute('aria-pressed',String(choice.textContent===input.value));
+      }
+      input.addEventListener('input',rememberAnswer);
+      for(const option of question.options) {
+        const choice=el('button',option,'secondary');choice.type='button';choice.setAttribute('aria-pressed',String(option===input.value));
+        choice.addEventListener('click',()=>{input.value=option;rememberAnswer();message.textContent='האפשרות נבחרה. לחצו על שליחת תשובה.';});choices.append(choice);
+      }
+      const button=el('button','שליחת תשובה');button.type='submit';form.append(choices,label,button,message);
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();if(button.disabled)return;
+        if(!input.value.trim()){message.textContent='יש לבחור אפשרות או לכתוב תשובה לפני השליחה.';input.focus();return;}
+        rememberAnswer();button.textContent='שולח…';message.textContent='שולח את התשובה…';
+        const result=await answerQuestion({action:'answer',question_id:question.id,answer:input.value},button);
+        if(result!==undefined) {answerDrafts.delete(question.id);message.textContent='התשובה נשמרה.';}
+        else message.textContent=$('feedback').textContent||'השליחה לא הושלמה. התשובה נשמרה בטופס; נסו שוב.';
+        button.textContent='שליחת תשובה';
+      });card.append(form);
     } root.append(card);
   }
 }
