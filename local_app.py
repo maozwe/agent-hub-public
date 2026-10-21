@@ -15,6 +15,7 @@ from hub import Hub
 from updates import VERSION, check_update
 from notifications import Push
 from worker import task_write_scope
+from activity import ActivityReader
 
 ROOT = Path(__file__).resolve().parent
 
@@ -23,6 +24,7 @@ class Controller:
     def __init__(self, config, config_path=None):
         self.config, self.config_path = config, config_path
         self.token = secrets.token_urlsafe(32)
+        self.activity = ActivityReader()
         self.process = None
         self.log = None
         self.lock = threading.Lock()
@@ -70,6 +72,10 @@ class Controller:
         with closing(Hub(self.config["database"])) as hub:
             state = hub.status()
             state["agents"] = [dict(row) for row in hub.db.execute("SELECT * FROM agents ORDER BY name")]
+        for task in state["tasks"]:
+            runs = [run for run in state.get("runs", []) if run["task_id"] == task["id"]]
+            run = max(runs, key=lambda r:r["turn"]) if runs else None
+            task["activity"] = self.activity.read(task, run, self.config["repositories"].get(task["repository"], ""))
         state["repositories"] = self.config["repositories"]
         state["version"] = VERSION
         state["push"] = {"configured": self.push.enabled, "error": self.push.error}

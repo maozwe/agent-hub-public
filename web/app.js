@@ -28,7 +28,7 @@ async function save(data, button) {
 function badge(status, taskId) {
   const node=el(status==='waiting_for_user'?'button':'span',labels[status]||status,'badge '+status);
   if(status==='waiting_for_user') {node.type='button';node.setAttribute('aria-label','ממתינה לתשובה · משימה '+taskId);node.addEventListener('click',()=>openAnswers(taskId));}
-  if(['assigned','working','testing'].includes(status)) {
+  if(['assigned','working','testing'].includes(status) && state?.tasks.find(t=>t.id===taskId)?.activity?.at && !state.tasks.find(t=>t.id===taskId).activity.stale) {
     const activity=el('span',undefined,'task-activity');activity.setAttribute('aria-hidden','true');
     for(let i=0;i<3;i++) activity.append(el('span'));
     node.append(activity);node.title='המשימה במצב ביצוע. האנימציה אינה בדיקת התקדמות חיה של הסוכן.';
@@ -50,6 +50,14 @@ async function answerQuestion(data, button) {
   return result;
 }
 function localTime(value) { const utc=value.includes('T')?value:value.replace(' ','T')+'Z';return new Date(utc).toLocaleString('he-IL',{timeZone:'Asia/Jerusalem'}); }
+function activityLine(task) {
+  const activity=task.activity, root=el('div',undefined,'activity-line');
+  if(!activity?.at) {root.textContent='אין דיווח פעילות חי מהסוכן';if(activity?.started_at)root.append(el('span','תחילת ההפעלה: '+localTime(activity.started_at),'muted'));return root;}
+  const seconds=Math.max(0,activity.age_seconds), age=seconds<60?seconds+' שניות':Math.floor(seconds/60)+' דקות';
+  root.append(el('span',activity.summary),el('span','פעילות אחרונה: לפני '+age+' · '+localTime(activity.at),'muted'));
+  if(activity.stale) {root.classList.add('activity-stale');root.append(el('span','לא התקבל עדכון במשך יותר משתי דקות — ייתכן שהפעולה ממושכת או שהסוכן תקוע.'));}
+  return root;
+}
 function meta(task) { const node=el('div',undefined,'meta'); node.append(el('span',task.repository,'repo'),el('span','#'+task.id),el('span',task.agent||'טרם שויך סוכן'),el('span','עדיפות '+task.priority)); return node; }
 function assignment(task) {
   const form=el('form',undefined,'assignment'), label=el('label','שיוך סוכן'), select=el('select');
@@ -75,12 +83,12 @@ function participantsEditor(task) {
   form.append(group,el('p','משתתפים נוספים נשמרים לתיאום בלבד. הסוכן הראשי הוא המבצע היחיד.','hint'),button);
   form.addEventListener('submit',event=>{event.preventDefault();save({action:'participants',task_id:task.id,participants:chosenParticipants(group)},button);});return form;
 }
-function selectTask(task) {selected=task.id;renderDetail();$('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
+function selectTask(task) {if(matchMedia('(max-width:680px)').matches)setMobileView('tasks');selected=task.id;renderDetail();$('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
 function renderActive() {
   const root=$('active-tasks');root.replaceChildren();
   const active=state.tasks.filter(task=>['assigned','working','testing'].includes(task.status));
   if(!active.length) root.append(el('p','אין משימה שרצה כרגע.','empty'));
-  for(const task of active) {const row=el('div',undefined,'active-item'),button=el('button','#'+task.id+' · '+task.request.slice(0,100));button.type='button';button.addEventListener('click',()=>selectTask(task));row.append(button,el('span',task.agent||'ללא סוכן','owner'),badge(task.status,task.id));root.append(row);}
+  for(const task of active) {const row=el('div',undefined,'active-item'),button=el('button','#'+task.id+' · '+task.request.slice(0,100));button.type='button';button.addEventListener('click',()=>selectTask(task));row.append(button,el('span',task.agent||'ללא סוכן','owner'),badge(task.status,task.id));row.append(activityLine(task));root.append(row);}
 }
 function renderTasks() {
   const root=$('tasks'); root.replaceChildren();
@@ -99,6 +107,7 @@ function renderTasks() {
     title.type='button'; title.addEventListener('click',()=>selectTask(task));
     if(['assigned','working','testing'].includes(task.status)) row.classList.add('active-task');
     top.append(title,badge(task.status,task.id)); row.append(top,meta(task));
+    if(['assigned','working','testing'].includes(task.status)) row.append(activityLine(task));
     if(task.participants?.length) row.append(el('div','משתתפים: '+task.participants.join(', '),'participants-label'));
     if(task.status==='queued') row.append(assignment(task));root.append(row);
   }
@@ -144,7 +153,7 @@ function renderDetail() {
   const root=$('detail'),heading=el('h2','פרטי משימה');heading.id='detail-title';root.replaceChildren(heading);
   const task=state.tasks.find(task=>task.id===selected);
   if(!task) {root.append(el('p','בחרו משימה כדי לראות את הבקשה, ההחלטות ותוצאות ההפעלה.','empty'));return;}
-  root.append(meta(task),badge(task.status,task.id),el('pre',task.request));
+  root.append(meta(task),badge(task.status,task.id),el('pre',task.request),activityLine(task));
   root.append(el('h3','הסוכנים במשימה'));
   if(task.status==='queued') root.append(assignment(task));
   else root.append(el('p','סוכן ראשי: '+(task.agent||'ללא שיוך')+'. החלפת המבצע זמינה כשהמשימה בתור.','assignment-note'));
@@ -213,3 +222,10 @@ $('shutdown').addEventListener('click',async event=>{
 refresh(); setInterval(()=>refresh(),3000);
 
 $('close-answer').addEventListener('click',()=>$('answer-dialog').close());
+
+function setMobileView(view) {
+  if(!['decisions','tasks','agents','connection','version'].includes(view)) return;
+  document.body.dataset.mobileView=view;
+  for(const button of document.querySelectorAll('.mobile-tabs button')) button.setAttribute('aria-pressed',String(button.dataset.view===view));
+}
+for(const button of document.querySelectorAll('.mobile-tabs button')) button.addEventListener('click',()=>setMobileView(button.dataset.view));
