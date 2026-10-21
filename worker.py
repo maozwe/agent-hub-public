@@ -12,8 +12,9 @@ from hub import Hub
 
 
 class Worker:
-    def __init__(self, database, repositories, delegate):
+    def __init__(self, database, repositories, delegate, auto_assign=False):
         self.database, self.repositories, self.delegate = database, repositories, delegate
+        self.auto_assign = auto_assign
         with closing(Hub(database)) as hub:
             hub.db.execute("""CREATE TABLE IF NOT EXISTS runs(
                 task_id INTEGER NOT NULL REFERENCES tasks(id), turn INTEGER NOT NULL,
@@ -30,7 +31,7 @@ class Worker:
                 task = hub.db.execute(
                     "SELECT * FROM tasks WHERE agent=? AND status IN ('assigned','working') "
                     "ORDER BY priority,id LIMIT 1", (agent,)).fetchone()
-                task = dict(task) if task else hub.claim(agent)
+                task = dict(task) if task else hub.claim(agent, auto_assign=self.auto_assign)
                 if task is None:
                     return None
                 task_id = task["id"]
@@ -162,15 +163,15 @@ async def run(args):
             async def delegate(agent, workspace, context):
                 return await rutherford_delegate(session, agent, workspace, context, task_write_scope(config, context))
 
-            worker = Worker(config["database"], config["repositories"], delegate)
-            while True:
-                for agent in agents:
+            worker = Worker(config["database"], config["repositories"], delegate, auto_assign=True)
+            async def work_agent(agent):
+                while True:
                     response = await worker.tick(agent)
                     if response:
                         print(json.dumps({"agent": agent, "result": response}, ensure_ascii=False), flush=True)
-                if args.once:
-                    return
-                await asyncio.sleep(3)
+                    if args.once: return
+                    await asyncio.sleep(3)
+            await asyncio.gather(*(work_agent(agent) for agent in agents))
 
 
 if __name__ == "__main__":

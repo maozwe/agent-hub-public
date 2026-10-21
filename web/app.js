@@ -103,7 +103,7 @@ function renderTasks() {
   }
   const visible=state.tasks.filter(taskFilters[taskFilter].matches);
   $('filter-result').textContent='מוצגות '+visible.length+' מתוך '+state.tasks.length+' משימות';
-  if(!state.tasks.length) { root.append(el('p','אין משימות עדיין. צרו משימה ואז שייכו לה סוכן.','empty')); return; }
+  if(!state.tasks.length) { root.append(el('p','אין משימות עדיין. צרו משימה ובחרו סוכן או השאירו שיוך אוטומטי.','empty')); return; }
   if(!visible.length) root.append(el('p','אין משימות בסינון שנבחר.','empty'));
   for(const task of visible) {
     const row=el('article',undefined,'task'), top=el('div',undefined,'task-top'), title=el('button',task.request.length>110?task.request.slice(0,110)+'…':task.request,'task-title');

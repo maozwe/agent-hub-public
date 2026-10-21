@@ -122,7 +122,7 @@ class Hub:
             self.db.execute("UPDATE tasks SET agent=? WHERE id=?", (agent, task_id))
             return self.task(task_id)
 
-    def claim(self, agent):
+    def claim(self, agent, auto_assign=False):
         """Reserve only explicitly assigned work; never choose an agent."""
         with self.transaction():
             row = self.db.execute("SELECT connected FROM agents WHERE name=?", (agent,)).fetchone()
@@ -134,6 +134,11 @@ class Hub:
             row = None if busy else self.db.execute(
                 "SELECT id FROM tasks WHERE status='queued' AND agent=? "
                 "ORDER BY priority,id LIMIT 1", (agent,)).fetchone()
+            if not busy and row is None and auto_assign:
+                if agent not in {'claude','codex','cursor'}:
+                    raise ValueError('Automatic assignment is only available to local workers')
+                row = self.db.execute("SELECT id FROM tasks WHERE status='queued' AND agent IS NULL "
+                                      "ORDER BY priority,id LIMIT 1").fetchone()
             if row:
                 self.db.execute("UPDATE tasks SET agent=?,status='assigned' WHERE id=?",
                                 (agent, row["id"]))
