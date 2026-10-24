@@ -6,7 +6,7 @@ const nodes={feedback:{},'last-update':{},'connection-status':{}};
 let offline=true;
 const context=vm.createContext({$:id=>nodes[id],document:{body:{classList:{add(){},remove(){}}},activeElement:{closest:()=>null},querySelector:()=>({classList:{add(){},remove(){}}})},
   render(){}, fetch:async()=>{if(offline)throw Error('offline');return {ok:true,json:async()=>({tasks:[]})};}});
-vm.runInContext("let stopped=false,previous='',state,connectionErrorShown=false;"+feedback+refresh,context);
+vm.runInContext("let stopped=false,previous='',state,connectionErrorShown=false,voiceBusy=false;"+feedback+refresh,context);
 (async()=>{
   await vm.runInContext('refresh()',context);assert.equal(nodes.feedback.className,'error');assert.ok(nodes.feedback.textContent);
   offline=false;await vm.runInContext('refresh()',context);assert.equal(nodes.feedback.textContent,'');
