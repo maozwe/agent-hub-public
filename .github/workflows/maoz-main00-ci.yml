@@ -1,0 +1,174 @@
+# maoz-main00-ci.yml  (DRAFT - managed by sync-repos.ps1; edit the template, not per-repo copies)
+# Runs CI on Maoz's PC (self-hosted runner, label maoz-main00) on every push to the default branch,
+# and creates a release when the project version changes or a v* tag is pushed.
+# Security: no pull_request / pull_request_target triggers (safe for public repos); least-privilege
+# GITHUB_TOKEN per job; only actions/checkout is used, pinned to a full commit SHA.
+name: maoz-main00 CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maoz-main00-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    # owner guard: never run for forks/copies of this repo
+    if: github.repository_owner == 'maozwe'
+    runs-on: [self-hosted, maoz-main00]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Build and test (auto-detect; override with ci/local-ci.ps1)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Step([string]$exe, [string[]]$argv) {
+            Write-Host ">> $exe $($argv -join ' ')"
+            & $exe @argv
+            if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
+          }
+          if (Test-Path 'ci/local-ci.ps1') { & ./ci/local-ci.ps1; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 0 }
+          $did = $false
+          # Node / TypeScript
+          if (Test-Path 'package.json') {
+            $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+            if (Test-Path 'package-lock.json') { Invoke-Step npm @('ci','--no-audit','--no-fund') } else { Invoke-Step npm @('install','--no-audit','--no-fund') }
+            if ($pkg.scripts.lint) { Invoke-Step npm @('run','lint') }
+            if ($pkg.scripts.build) { Invoke-Step npm @('run','build') }
+            if ($pkg.scripts.test -and $pkg.scripts.test -notmatch 'no test specified') { Invoke-Step npm @('test') }
+            $did = $true
+          }
+          # Python (uv first, then pip/venv)
+          if (Test-Path 'uv.lock') {
+            Invoke-Step uv @('sync','--frozen')
+            if ((Test-Path 'tests') -or (Test-Path 'test')) { Invoke-Step uv @('run','--','python','-m','pytest','-q') }
+            $did = $true
+          } elseif ((Test-Path 'pyproject.toml') -or (Test-Path 'requirements.txt')) {
+            Invoke-Step python @('-m','venv','.venv')
+            $py = '.venv\Scripts\python.exe'
+            Invoke-Step $py @('-m','pip','install','--disable-pip-version-check','-q','--upgrade','pip')
+            if (Test-Path 'requirements.txt') { Invoke-Step $py @('-m','pip','install','-q','-r','requirements.txt') }
+            elseif (Test-Path 'pyproject.toml') { Invoke-Step $py @('-m','pip','install','-q','-e','.') }
+            Invoke-Step $py @('-m','compileall','-q','-x','[\\/]\.venv[\\/]','.')
+            if ((Test-Path 'tests') -or (Test-Path 'test')) { Invoke-Step $py @('-m','pip','install','-q','pytest'); Invoke-Step $py @('-m','pytest','-q') }
+            $did = $true
+          }
+          # .NET / C#
+          $sln = Get-ChildItem -Path . -Recurse -Depth 2 -Include *.sln,*.slnx -ErrorAction SilentlyContinue | Select-Object -First 1
+          $proj = if ($sln) { $sln.FullName } else { (Get-ChildItem -Path . -Recurse -Depth 3 -Filter *.csproj -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
+          if ($proj) {
+            Invoke-Step dotnet @('build',$proj,'-c','Release','--nologo')
+            $tests = Get-ChildItem -Path . -Recurse -Depth 4 -Filter *.csproj | Where-Object { $_.Name -match 'Test' }
+            if ($tests) { Invoke-Step dotnet @('test',$proj,'-c','Release','--no-build','--nologo') }
+            $did = $true
+          }
+          # Rust
+          if (Test-Path 'Cargo.toml') { Invoke-Step cargo @('build','--locked'); Invoke-Step cargo @('test','--locked'); $did = $true }
+          # Flutter
+          if (Test-Path 'pubspec.yaml') { Invoke-Step flutter.bat @('pub','get'); if (Test-Path 'test') { Invoke-Step flutter.bat @('test') }; $did = $true }
+          # Android / Gradle (Kotlin, Java)
+          if (Test-Path 'gradlew.bat') { Invoke-Step .\gradlew.bat @('--no-daemon','assembleDebug','testDebugUnitTest'); $did = $true }
+          if (-not $did) { Write-Host "::notice::No recognised build system (package.json, pyproject/requirements, sln/csproj, Cargo.toml, pubspec.yaml, gradlew). Add ci/local-ci.ps1 to define CI for this repo." }
+
+  release:
+    needs: ci
+    if: github.repository_owner == 'maozwe' && github.event_name != 'workflow_dispatch'
+    runs-on: [self-hosted, maoz-main00]
+    timeout-minutes: 30
+    permissions:
+      contents: write   # create tag + GitHub Release in this repo
+      actions: write    # dispatch this repo's existing release.yml, if present
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Detect version and release if new
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          # Set per repo by sync-repos.ps1 when the PR is opened: off | dispatch | generic
+          #   dispatch = run this repo's existing release.yml (workflow_dispatch) when the version is new
+          #   generic  = gh release create in this repo (+ optional public mirror below)
+          RELEASE_MODE: off
+          # Optional repo variable, e.g. maozwe/Foo-releases. Needs secret RELEASES_TOKEN with contents:write on that repo.
+          PUBLIC_RELEASES_REPO: ${{ vars.PUBLIC_RELEASES_REPO }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Get-ProjectVersion {
+            if (Test-Path 'VERSION') { return (Get-Content VERSION -TotalCount 1).Trim() }
+            if (Test-Path 'package.json') { $v = (Get-Content package.json -Raw | ConvertFrom-Json).version; if ($v) { return $v } }
+            foreach ($f in 'pyproject.toml','Cargo.toml') {
+              if (Test-Path $f) {
+                $t = Get-Content $f -Raw
+                $m = [regex]::Match($t, '(?ms)^\[(project|package|tool\.poetry)\][^\[]*?^version\s*=\s*"([^"]+)"')
+                if ($m.Success) { return $m.Groups[2].Value }
+              }
+            }
+            if (Test-Path 'pubspec.yaml') { $m = Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9][^\s+]*)' | Select-Object -First 1; if ($m) { return $m.Matches[0].Groups[1].Value } }
+            $props = @(Get-ChildItem -Recurse -Depth 3 -Include Directory.Build.props,*.csproj -ErrorAction SilentlyContinue)
+            foreach ($p in $props) { $m = Select-String -Path $p.FullName -Pattern '<(Version|VersionPrefix)>([^<]+)<' | Select-Object -First 1; if ($m) { return $m.Matches[0].Groups[2].Value } }
+            foreach ($g in 'app/build.gradle.kts','app/build.gradle') { if (Test-Path $g) { $m = Select-String -Path $g -Pattern 'versionName\s*=?\s*"([^"]+)"' | Select-Object -First 1; if ($m) { return $m.Matches[0].Groups[1].Value } } }
+            if (Test-Path 'CHANGELOG.md') { $m = Select-String -Path CHANGELOG.md -Pattern '^##\s*\[?v?(\d+\.\d+\.\d+[^\]\s]*)' | Select-Object -First 1; if ($m) { return $m.Matches[0].Groups[1].Value } }
+            return $null
+          }
+          if ($env:RELEASE_MODE -eq 'off') { Write-Host 'Release mode is off for this repo.'; exit 0 }
+          if ($env:REF_TYPE -eq 'tag') { $tag = $env:REF_NAME } else {
+            $ver = Get-ProjectVersion
+            if (-not $ver) { Write-Host '::notice::No version found; no release.'; exit 0 }
+            $tag = "v$ver"
+            $ErrorActionPreference = 'Continue'
+            gh api "repos/$($env:REPO)/git/ref/tags/$tag" --silent 2>$null
+            $ErrorActionPreference = 'Stop'
+            if ($LASTEXITCODE -eq 0) { Write-Host "Tag $tag already exists; nothing to release."; exit 0 }
+            if ($env:PUBLIC_RELEASES_REPO) {
+              $ErrorActionPreference = 'Continue'   # PS 5.1: native stderr + Stop would throw
+              gh release view $tag --repo $env:PUBLIC_RELEASES_REPO --json tagName 2>$null | Out-Null
+              $ErrorActionPreference = 'Stop'
+              if ($LASTEXITCODE -eq 0) { Write-Host "$tag already released in $($env:PUBLIC_RELEASES_REPO)."; exit 0 }
+            }
+          }
+          $pre = @(); if ($tag -match '-') { $pre = @('--prerelease') }
+          # 1) Repo already has its own release pipeline -> reuse it (it knows signing, assets, public target).
+          $own = '.github/workflows/release.yml'
+          if ($env:RELEASE_MODE -eq 'dispatch') {
+            if (-not ((Test-Path $own) -and ((Get-Content $own -Raw) -match 'workflow_dispatch'))) { throw 'RELEASE_MODE=dispatch but no dispatchable .github/workflows/release.yml' }
+            Write-Host "Dispatching existing release.yml for $tag"
+            gh workflow run release.yml --repo $env:REPO --ref $env:REF_NAME
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            exit 0
+          }
+          # 2) Generic release in this repo. Optional ci/release.ps1 builds files into release-assets/.
+          if (Test-Path 'ci/release.ps1') { & ./ci/release.ps1 -Tag $tag; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+          $assets = @(); if (Test-Path 'release-assets') { $assets = @(Get-ChildItem release-assets -File | ForEach-Object { $_.FullName }) }
+          if ($env:REF_TYPE -ne 'tag') { $target = @('--target', $env:SHA) } else { $target = @() }
+          gh release create $tag @assets --repo $env:REPO --title $tag --generate-notes @target @pre
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # 3) Optional public mirror release (private source -> public *-releases repo)
+          if ($env:PUBLIC_RELEASES_REPO -and $env:RELEASES_TOKEN) {
+            $env:GH_TOKEN = $env:RELEASES_TOKEN
+            gh release create $tag @assets --repo $env:PUBLIC_RELEASES_REPO --title $tag --notes "Release $tag of $($env:REPO.Split('/')[1])" @pre
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
