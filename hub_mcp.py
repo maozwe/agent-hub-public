@@ -5,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 from hub import Hub
 
 
-def build_server(database, identity, role):
+def build_server(database, identity, role, **transport_settings):
     identity = Hub.text(identity)
     if role not in {"operator", "agent"}:
         raise ValueError("Unknown role")
@@ -13,7 +13,7 @@ def build_server(database, identity, role):
         "Use only explicitly assigned tasks. Read task_context after user responses. "
         "Route questions and application approval requests here. Provider permissions still "
         "require the provider's native approval. On completion call complete_task, then "
-        "inspect next_task. MCP cannot wake an idle agent."))
+        "inspect next_task. MCP cannot wake an idle agent."), **transport_settings)
 
     def call(method, *args):
         with closing(Hub(database)) as hub:

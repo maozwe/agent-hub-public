@@ -1,0 +1,13 @@
+# Dedicated public hostname; the backend enforces OAuth on every MCP request.
+{$HUB_MCP_HOST} {
+	header Strict-Transport-Security "max-age=31536000"
+	@mcp path /mcp /.well-known/oauth-protected-resource/mcp
+	handle @mcp {
+		reverse_proxy 127.0.0.1:8877 {
+			flush_interval -1
+		}
+	}
+	handle {
+		respond 404
+	}
+}
